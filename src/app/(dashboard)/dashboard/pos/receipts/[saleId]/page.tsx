@@ -8,7 +8,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ saleId
   const { saleId } = await params;
   const ctx = await requireAuthContext();
   const [sale, settings] = await Promise.all([
-    ctx.db.sale.findFirst({ where: { id: saleId }, include: { organization: true, branch: true, register: true, cashier: true, customer: true, items: { include: { variant: { include: { product: true } } } }, payments: true } }),
+    ctx.db.sale.findFirst({ where: { id: saleId, organizationId: ctx.organizationId, status: "COMPLETED" }, include: { organization: true, branch: true, register: true, cashier: true, customer: true, items: { include: { variant: { include: { product: true } } } }, payments: true } }),
     ctx.db.receiptSettings.findUnique({ where: { organizationId: ctx.organizationId } }),
   ]);
   if (!sale) notFound();

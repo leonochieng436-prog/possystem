@@ -144,6 +144,8 @@ body {
 }
 
 .receipt-page { background: var(--background); padding-bottom: 2rem; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
 .receipt-sheet { width: min(100%, 560px); margin: 0 auto; background: #fff; color: #111; padding: 28px; font-family: Arial, sans-serif; font-size: 13px; line-height: 1.35; box-shadow: 0 8px 24px rgba(18, 23, 26, 0.08); }
 .receipt-toolbar { display: flex; justify-content: flex-end; margin-bottom: 18px; }
 .receipt-header, .receipt-footer { text-align: center; }
@@ -173,8 +175,9 @@ body {
 
 @media print {
   @page { margin: 4mm; }
-  body:has(.receipt-page) aside,
-  body:has(.receipt-page) header { display: none !important; }
+  body:has(.receipt-page) * { visibility: hidden !important; }
+  body:has(.receipt-page) .receipt-sheet,
+  body:has(.receipt-page) .receipt-sheet * { visibility: visible !important; }
   body:has(.receipt-page) main { padding: 0 !important; }
   body { background: #fff; }
   .receipt-page { padding: 0; }

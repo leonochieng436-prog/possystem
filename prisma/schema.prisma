@@ -935,6 +935,9 @@ model SaleItem {
   sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variantId    String
   variant      ProductVariant @relation(fields: [variantId], references: [id])
+  productNameSnapshot String?
+  variantNameSnapshot String?
+  skuSnapshot         String?
   quantity     Decimal  @db.Decimal(14, 3)
   unitPrice    Decimal  @db.Decimal(14, 2) // server-validated at time of sale
   discount     Decimal  @default(0) @db.Decimal(14, 2)

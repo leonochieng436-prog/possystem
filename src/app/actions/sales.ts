@@ -34,7 +34,7 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
     const register = await ctx.db.register.findFirst({ where: { id: input.registerId, branchId: input.branchId, isActive: true } });
     const warehouse = await ctx.db.warehouse.findFirst({ where: { id: input.warehouseId, branchId: input.branchId, isActive: true } });
     if (!branch || !register || !warehouse) return { ok: false, error: "Branch, register, or warehouse not found." };
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true } } });
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true } }, include: { product: true } });
     if (variants.length !== input.items.length) return { ok: false, error: "One or more products were not found." };
     const lines = input.items.map((item) => { const variant = variants.find((candidate) => candidate.id === item.variantId)!; const quantity = new Decimal(item.quantity); const price = new Decimal(variant.sellingPrice.toString()); return { ...item, quantity, price, total: quantity.times(price), variant }; });
     const subtotal = lines.reduce((sum, line) => sum.plus(line.total), new Decimal(0));
@@ -45,7 +45,7 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
         const consumed = await decreaseStock(tx as unknown as Prisma.TransactionClient, { organizationId: ctx.organizationId, warehouseId: warehouse.id, variantId: line.variantId, quantity: line.quantity, type: "SALE", referenceType: "Sale", createdById: ctx.userId });
         const unitCost = consumed.totalConsumed.isZero() ? new Decimal(0) : consumed.totalCost.div(consumed.totalConsumed);
         cogs = cogs.plus(consumed.totalCost);
-        saleItems.push({ variantId: line.variantId, quantity: line.quantity.toString(), unitPrice: line.price.toString(), unitCost: unitCost.toString(), total: line.total.toString() });
+        saleItems.push({ variantId: line.variantId, productNameSnapshot: line.variant.product.name, variantNameSnapshot: line.variant.name, skuSnapshot: line.variant.sku, quantity: line.quantity.toString(), unitPrice: line.price.toString(), unitCost: unitCost.toString(), total: line.total.toString() });
       }
       const amountPaid = new Decimal(input.amountPaid); if (!input.paymentMethod || amountPaid.lessThan(subtotal) && input.paymentMethod !== "CREDIT") throw new Error("Payment is less than the sale total.");
       if (input.customerId && input.paymentMethod === "CREDIT") {
@@ -85,7 +85,7 @@ export async function updateReceiptNotes(raw: unknown): Promise<ActionResult<und
     assertPermission(ctx, "SALES_VIEW");
     const parsed = z.object({ saleId: z.string().min(1), notes: z.string().max(300) }).safeParse(raw);
     if (!parsed.success) return { ok: false, error: "Receipt note is too long." };
-    const sale = await ctx.db.sale.findFirst({ where: { id: parsed.data.saleId, status: "COMPLETED" } });
+    const sale = await ctx.db.sale.findFirst({ where: { id: parsed.data.saleId, organizationId: ctx.organizationId, status: "COMPLETED" } });
     if (!sale) return { ok: false, error: "Receipt not found." };
     await ctx.db.sale.update({ where: { id: sale.id }, data: { notes: parsed.data.notes || null } });
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "RECEIPT_NOTE_UPDATED", entityType: "Sale", entityId: sale.id });

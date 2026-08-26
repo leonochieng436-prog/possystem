@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
 import { requireAuthContext } from "@/server/auth/context";
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-}
+import { buildReceiptData } from "@/lib/receipts/receipt-data";
+import { getReceiptData } from "@/services/receipts/receipt.service";
+import { generateReceiptHtml } from "@/services/receipts/receipt-html.service";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ saleId: string }> }) {
-  const { saleId } = await params;
-  const ctx = await requireAuthContext();
-  const [sale, settings] = await Promise.all([
-    ctx.db.sale.findFirst({ where: { id: saleId }, include: { organization: true, branch: true, register: true, cashier: true, customer: true, items: { include: { variant: { include: { product: true } } } }, payments: true } }),
-    ctx.db.receiptSettings.findUnique({ where: { organizationId: ctx.organizationId } }),
-  ]);
-  if (!sale) return new NextResponse("Receipt not found", { status: 404 });
-  const showTax = settings?.showTax !== false && Number(sale.taxTotal) > 0;
-  const showDiscount = settings?.showDiscount !== false && Number(sale.discountTotal) > 0;
-  const money = (value: unknown) => `KES ${Number(value ?? 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const payments = sale.payments.map((payment) => `<div><span>${escapeHtml(payment.method === "MPESA" ? "M-Pesa" : payment.method)}${settings?.showPaymentReference !== false && payment.providerRef ? ` · ${escapeHtml(payment.providerRef)}` : ""}</span><strong>${money(payment.amount)}</strong></div>`).join("");
-  const items = sale.items.map((item) => `<tr><td><strong>${escapeHtml(item.variant.product.name)}</strong>${item.variant.name !== item.variant.product.name ? `<small>${escapeHtml(item.variant.name)}</small>` : ""}${settings?.showSku !== false ? `<small>${escapeHtml(item.variant.sku)}</small>` : ""}</td><td>${escapeHtml(item.quantity)}</td><td>${Number(item.unitPrice).toFixed(2)}</td><td>${Number(item.total).toFixed(2)}</td></tr>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(sale.receiptNumber)}</title><style>@page{size:${escapeHtml(settings?.paperSize ?? "80mm")};margin:4mm}*{box-sizing:border-box}body{font:13px Arial,sans-serif;line-height:1.35;max-width:${settings?.paperSize === "A4" ? "190mm" : settings?.paperSize === "58mm" ? "58mm" : "80mm"};margin:0 auto;color:#111}header,footer{text-align:center}header h1{margin:0;font-size:22px}header p,footer p{margin:2px 0;color:#4d565a}.title{margin-top:16px;font-weight:bold;letter-spacing:.12em}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;border-block:1px solid #d9dede;padding:10px 0;margin:18px 0}.meta span,.meta strong{display:block}.meta span,small{color:#687276;font-size:11px}table{width:100%;border-collapse:collapse;table-layout:fixed}th{border-bottom:1px solid #222;padding:6px 3px;text-align:left;font-size:11px}th:first-child{width:52%}th:not(:first-child),td:not(:first-child){text-align:right}td{padding:7px 3px;vertical-align:top;overflow-wrap:anywhere}td strong,td small{display:block}.totals,.payment{margin-top:18px;border-top:1px solid #d9dede;padding-top:10px}.totals div,.payment div{display:flex;justify-content:space-between;gap:12px;padding:3px 0}.grand{border-top:1px solid #222;padding-top:8px!important;font-size:18px;font-weight:bold}.payment h2{font-size:11px;letter-spacing:.12em}.note{border-top:1px solid #d9dede;padding-top:10px}.footer{margin-top:22px;border-top:1px solid #d9dede;padding-top:14px}.footer p:last-child{margin-top:10px;font-size:11px}@media(max-width:300px){.meta{grid-template-columns:1fr}th:first-child{width:48%}}</style></head><body><header>${settings?.showBusinessLogo !== false && sale.organization.logoUrl ? `<img src="${escapeHtml(sale.organization.logoUrl)}" alt="" style="display:block;max-width:100px;max-height:60px;margin:0 auto 8px;object-fit:contain">` : ""}<h1>${escapeHtml(sale.organization.name)}</h1>${sale.organization.legalName ? `<p>${escapeHtml(sale.organization.legalName)}</p>` : ""}${sale.organization.address ? `<p>${escapeHtml(sale.organization.address)}</p>` : ""}<p>${escapeHtml([sale.organization.phone, sale.organization.email].filter(Boolean).join(" · "))}</p>${sale.organization.taxPin ? `<p>PIN: ${escapeHtml(sale.organization.taxPin)}</p>` : ""}<div class="title">SALES RECEIPT</div></header><section class="meta"><div><span>Receipt No</span><strong>${escapeHtml(sale.receiptNumber)}</strong></div><div><span>Date</span><strong>${escapeHtml(sale.createdAt.toLocaleString("en-KE"))}</strong></div><div><span>Branch</span><strong>${escapeHtml(sale.branch.name)}</strong></div><div><span>Register</span><strong>${escapeHtml(sale.register.name)}</strong></div>${settings?.showCashier !== false ? `<div><span>Cashier</span><strong>${escapeHtml(sale.cashier.name)}</strong></div>` : ""}${settings?.showCustomer !== false ? `<div><span>Customer</span><strong>${escapeHtml(sale.customer?.name ?? "Walk-in customer")}</strong></div>` : ""}</section><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${items}</tbody></table><section class="totals"><div><span>Subtotal</span><strong>${money(sale.subtotal)}</strong></div>${showDiscount ? `<div><span>Discount</span><strong>- ${money(sale.discountTotal)}</strong></div>` : ""}${showTax ? `<div><span>Tax</span><strong>${money(sale.taxTotal)}</strong></div>` : ""}<div class="grand"><span>TOTAL</span><strong>${money(sale.total)}</strong></div></section><section class="payment"><h2>PAYMENT</h2>${payments}<div><span>Amount paid</span><strong>${money(sale.amountPaid)}</strong></div>${Number(sale.changeGiven) > 0 ? `<div><span>Change</span><strong>${money(sale.changeGiven)}</strong></div>` : ""}</section>${sale.notes ? `<p class="note">Note: ${escapeHtml(sale.notes)}</p>` : ""}<footer class="footer"><p>${escapeHtml(settings?.footerMessage ?? "Thank you for shopping with us!")}</p><p>Powered by DUKAOS</p></footer></body></html>`;
-  return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Content-Disposition": `attachment; filename="${sale.receiptNumber}.html"` } });
+	try {
+		const { saleId } = await params;
+		const ctx = await requireAuthContext();
+		const data = await getReceiptData(ctx.db, ctx.organizationId, saleId);
+		if (!data) return new NextResponse("Receipt not found", { status: 404 });
+		if (ctx.branchIds && !ctx.branchIds.includes(data.sale.branchId)) return new NextResponse("Receipt not found", { status: 404 });
+		const receipt = buildReceiptData(data.sale, data.settings);
+		return new NextResponse(generateReceiptHtml(receipt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" } });
+	} catch (error) {
+		console.error("Receipt generation error:", error);
+		return new NextResponse("Unable to generate receipt", { status: 500 });
+	}
 }
