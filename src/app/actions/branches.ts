@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuthContext, assertPermission, AuthError } from "@/server/auth/context";
+import { requireAuthContext, assertPermission, assertOwner, AuthError } from "@/server/auth/context";
 import { recordAudit } from "@/server/services/audit";
 import { createBranchSchema } from "@/lib/validation/auth";
 import type { ActionResult } from "./auth";
@@ -10,6 +10,7 @@ export async function createBranch(raw: unknown): Promise<ActionResult<{ id: str
   try {
     const ctx = await requireAuthContext();
     assertPermission(ctx, "BRANCHES_MANAGE");
+    assertOwner(ctx);
 
     const parsed = createBranchSchema.safeParse(raw);
     if (!parsed.success) {

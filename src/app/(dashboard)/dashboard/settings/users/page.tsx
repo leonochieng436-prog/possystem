@@ -3,6 +3,7 @@ import { rawPrisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InviteUserForm } from "./invite-user-form";
+import { UserActions } from "./user-actions";
 
 export default async function UsersPage() {
   const ctx = await requireAuthContext();
@@ -38,7 +39,7 @@ export default async function UsersPage() {
         <CardContent className="p-0">
           <ul className="divide-y divide-border">
             {memberships.map((m) => (
-              <li key={m.id} className="flex items-center justify-between px-5 py-3">
+              <li key={m.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div>
                   <p className="text-sm font-medium">
                     {m.user.name}
@@ -48,7 +49,7 @@ export default async function UsersPage() {
                   </p>
                   <p className="text-[12px] text-muted-foreground">{m.user.email}</p>
                 </div>
-                <Badge variant="primary">{m.role.name}</Badge>
+                <div className="flex items-center gap-3"><Badge variant={m.isActive ? "primary" : "neutral"}>{m.isActive ? m.role.name : "Deactivated"}</Badge>{m.isActive && !m.isOwner && <UserActions userId={m.userId} name={m.user.name} />}</div>
               </li>
             ))}
           </ul>

@@ -7,6 +7,7 @@ import { requireAuthContext, assertPermission, assertBranchAccess, AuthError } f
 import { decreaseStock } from "@/server/services/inventory";
 import { recordAudit } from "@/server/services/audit";
 import { saleSchema, cashSessionSchema, closeCashSessionSchema } from "@/lib/validation/sales";
+import { z } from "zod";
 import type { ActionResult } from "./auth";
 
 export async function openCashSession(raw: unknown): Promise<ActionResult<undefined>> {
@@ -75,5 +76,20 @@ export async function closeCashSession(raw: unknown): Promise<ActionResult<undef
     const actual = new Decimal(input.actualBalance);
     await ctx.db.cashSession.update({ where: { id: session.id }, data: { status: "CLOSED", expectedBalance: expected.toFixed(2), actualBalance: actual.toFixed(2), variance: actual.minus(expected).toFixed(2), closedAt: new Date() } });
     revalidatePath("/dashboard/pos"); return { ok: true, data: undefined };
+  } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; throw e; }
+}
+
+export async function updateReceiptNotes(raw: unknown): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "SALES_VIEW");
+    const parsed = z.object({ saleId: z.string().min(1), notes: z.string().max(300) }).safeParse(raw);
+    if (!parsed.success) return { ok: false, error: "Receipt note is too long." };
+    const sale = await ctx.db.sale.findFirst({ where: { id: parsed.data.saleId, status: "COMPLETED" } });
+    if (!sale) return { ok: false, error: "Receipt not found." };
+    await ctx.db.sale.update({ where: { id: sale.id }, data: { notes: parsed.data.notes || null } });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "RECEIPT_NOTE_UPDATED", entityType: "Sale", entityId: sale.id });
+    revalidatePath("/dashboard/pos"); revalidatePath(`/dashboard/pos/receipts/${sale.id}`);
+    return { ok: true, data: undefined };
   } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; throw e; }
 }

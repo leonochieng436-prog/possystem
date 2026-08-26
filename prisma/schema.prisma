@@ -61,6 +61,8 @@ model Organization {
   subscription        Subscription?
   taxRates            TaxRate[]
   paymentProviderCfgs PaymentProviderConfig[]
+  receiptSettings    ReceiptSettings?
+  notificationSettings NotificationSetting[]
 
   @@map("organizations")
 }
@@ -995,6 +997,40 @@ model PaymentProviderConfig {
 
   @@unique([organizationId, provider])
   @@map("payment_provider_configs")
+}
+
+model ReceiptSettings {
+  id                   String   @id @default(cuid())
+  organizationId       String   @unique
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paperSize            String   @default("80mm")
+  autoPrint            Boolean  @default(true)
+  showBusinessLogo     Boolean  @default(true)
+  showCashier          Boolean  @default(true)
+  showCustomer         Boolean  @default(true)
+  showSku              Boolean  @default(true)
+  showTax              Boolean  @default(true)
+  showDiscount         Boolean  @default(true)
+  showPaymentReference Boolean  @default(true)
+  footerMessage        String?
+  updatedAt            DateTime @updatedAt
+
+  @@map("receipt_settings")
+}
+
+model NotificationSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  eventKey       String
+  dashboard      Boolean  @default(true)
+  email          Boolean  @default(false)
+  enabled        Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, eventKey])
+  @@index([organizationId])
+  @@map("notification_settings")
 }
 
 // ────────────────────────────────────────────────────────────────────────

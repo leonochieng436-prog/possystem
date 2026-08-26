@@ -10,6 +10,7 @@ import {
   provisionSystemRoles,
   provisionDefaultExpenseCategories,
   provisionDefaultBranchStructure,
+  provisionDefaultSettings,
 } from "@/server/services/organization";
 import { uniqueOrgSlug } from "@/lib/slug";
 import { randomBytes, createHash } from "crypto";
@@ -82,6 +83,7 @@ export async function registerOrganization(
     const roles = await provisionSystemRoles(tx, org.id);
     await provisionDefaultExpenseCategories(tx, org.id);
     await provisionDefaultBranchStructure(tx, org.id);
+    await provisionDefaultSettings(tx, org.id);
 
     const user = await tx.user.create({
       data: {

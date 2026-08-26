@@ -53,7 +53,7 @@ export function PosForm({ branches, warehouses, registers, variants, customers }
     startTransition(async () => {
       const result = await createSale(payload);
       if (!result.ok) return setError(result.error);
-      setCart([]); setAmountPaid(""); setCustomerId(""); router.refresh();
+      setCart([]); setAmountPaid(""); setCustomerId(""); router.push(`/dashboard/pos/receipts/${result.data.id}`);
     });
   }
 

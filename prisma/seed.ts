@@ -21,6 +21,7 @@ import { hashPassword } from "../src/server/auth/password";
 import {
   provisionSystemRoles,
   provisionDefaultExpenseCategories,
+  provisionDefaultSettings,
 } from "../src/server/services/organization-core";
 
 const prisma = new PrismaClient();
@@ -51,6 +52,7 @@ async function seedDemoTenant() {
     where: { slug: "leon-retail-store" },
   });
   if (existing) {
+    await provisionDefaultSettings(prisma, existing.id);
     console.log("Demo tenant already exists, skipping.");
     return;
   }
@@ -71,6 +73,7 @@ async function seedDemoTenant() {
 
   const roles = await provisionSystemRoles(prisma, org.id);
   await provisionDefaultExpenseCategories(prisma, org.id);
+  await provisionDefaultSettings(prisma, org.id);
 
   await prisma.subscription.create({
     data: {

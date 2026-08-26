@@ -21,6 +21,7 @@ export interface AuthContext {
   userId: string;
   organizationId: string;
   branchIds: string[] | null; // null = unrestricted (all branches)
+  isOwner: boolean;
   permissions: Set<string>;
   db: ReturnType<typeof getTenantDb>;
 }
@@ -80,6 +81,7 @@ export async function requireAuthContext(): Promise<AuthContext> {
     userId: session.userId,
     organizationId,
     branchIds,
+    isOwner: membership.isOwner,
     permissions: new Set(membership.role.permissions.map((p) => p.permission.key)),
     db: getTenantDb(organizationId),
   };
@@ -89,6 +91,13 @@ export async function requireAuthContext(): Promise<AuthContext> {
 export function assertPermission(ctx: AuthContext, permission: PermissionKey) {
   if (!ctx.permissions.has(permission)) {
     throw new AuthError(`Missing permission: ${permission}`, 403);
+  }
+}
+
+/** Throws AuthError(403) for organization-level owner-only operations. */
+export function assertOwner(ctx: AuthContext) {
+  if (!ctx.isOwner) {
+    throw new AuthError("Only the organization owner can perform this action", 403);
   }
 }
 

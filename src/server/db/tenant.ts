@@ -42,6 +42,8 @@ const TENANT_MODELS = [
   "stockCount",
   "taxRate",
   "paymentProviderConfig",
+  "receiptSettings",
+  "notificationSetting",
   "inventoryMovement",
   "supplierInvoice",
   "supplierPayment",

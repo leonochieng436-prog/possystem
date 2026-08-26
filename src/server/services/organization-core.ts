@@ -22,6 +22,27 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   "Other",
 ];
 
+const DEFAULT_NOTIFICATION_EVENTS = [
+  "LOW_STOCK",
+  "OUT_OF_STOCK",
+  "EXPIRING_STOCK",
+  "LARGE_REFUND",
+  "CASH_VARIANCE",
+  "FAILED_PAYMENT",
+];
+
+export async function provisionDefaultSettings(tx: Tx, organizationId: string) {
+  await tx.receiptSettings.upsert({
+    where: { organizationId },
+    update: {},
+    create: { organizationId, footerMessage: "Thank you for shopping with us!" },
+  });
+  await tx.notificationSetting.createMany({
+    data: DEFAULT_NOTIFICATION_EVENTS.map((eventKey) => ({ organizationId, eventKey })),
+    skipDuplicates: true,
+  });
+}
+
 export async function provisionSystemRoles(tx: Tx, organizationId: string) {
   const allPermissions = await tx.permission.findMany();
   const permissionIdByKey = new Map(allPermissions.map((p) => [p.key, p.id]));

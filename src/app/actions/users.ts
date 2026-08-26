@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { rawPrisma } from "@/server/db/client";
-import { requireAuthContext, assertPermission, AuthError } from "@/server/auth/context";
+import { requireAuthContext, assertPermission, assertOwner, AuthError } from "@/server/auth/context";
 import { hashPassword } from "@/server/auth/password";
 import { recordAudit } from "@/server/services/audit";
 import { inviteUserSchema } from "@/lib/validation/auth";
@@ -82,6 +82,33 @@ export async function inviteUser(
 
     revalidatePath("/dashboard/settings/users");
     return { ok: true, data: { temporaryPassword } };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+export async function deactivateUser(userId: string): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "USERS_MANAGE");
+    assertOwner(ctx);
+    if (!userId || userId === ctx.userId) return { ok: false, error: "You cannot deactivate yourself." };
+
+    const membership = await rawPrisma.userOrganization.findUnique({
+      where: { userId_organizationId: { userId, organizationId: ctx.organizationId } },
+    });
+    if (!membership) return { ok: false, error: "Team member not found." };
+    if (membership.isOwner) return { ok: false, error: "The organization owner cannot be deactivated." };
+
+    await rawPrisma.$transaction([
+      rawPrisma.userOrganization.update({ where: { id: membership.id }, data: { isActive: false } }),
+      rawPrisma.user.update({ where: { id: userId }, data: { isActive: false } }),
+      rawPrisma.session.deleteMany({ where: { userId } }),
+    ]);
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_DEACTIVATED", entityType: "User", entityId: userId });
+    revalidatePath("/dashboard/settings/users");
+    return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof AuthError) return { ok: false, error: e.message };
     throw e;

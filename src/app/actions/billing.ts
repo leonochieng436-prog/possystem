@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuthContext, assertPermission, AuthError } from "@/server/auth/context";
+import { requireAuthContext, assertPermission, assertOwner, AuthError } from "@/server/auth/context";
 import { recordAudit } from "@/server/services/audit";
 import { changePlanSchema } from "@/lib/validation/billing";
 import type { ActionResult } from "./auth";
@@ -15,7 +15,7 @@ const PLANS = {
 
 export async function changePlan(raw: unknown): Promise<ActionResult<undefined>> {
   try {
-    const ctx = await requireAuthContext(); assertPermission(ctx, "BILLING_MANAGE");
+    const ctx = await requireAuthContext(); assertPermission(ctx, "BILLING_MANAGE"); assertOwner(ctx);
     const parsed = changePlanSchema.safeParse(raw); if (!parsed.success) return { ok: false, error: "Choose a valid plan." };
     const input = parsed.data; const plan = PLANS[input.plan];
     const subscription = await ctx.db.subscription.upsert({ where: { organizationId: ctx.organizationId }, update: { plan: input.plan, status: input.plan === "trial" ? "trialing" : "active", branchLimit: plan.branchLimit, userLimit: plan.userLimit, currentPeriodEnd: new Date(Date.now() + plan.days * 86400000), trialEndsAt: input.plan === "trial" ? new Date(Date.now() + plan.days * 86400000) : null }, create: { organizationId: ctx.organizationId, plan: input.plan, status: input.plan === "trial" ? "trialing" : "active", branchLimit: plan.branchLimit, userLimit: plan.userLimit, currentPeriodEnd: new Date(Date.now() + plan.days * 86400000), trialEndsAt: input.plan === "trial" ? new Date(Date.now() + plan.days * 86400000) : null } });

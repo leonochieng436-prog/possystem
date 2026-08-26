@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { requireAuthContext, assertPermission, AuthError } from "@/server/auth/context";
+import { requireAuthContext, assertPermission, assertOwner, AuthError } from "@/server/auth/context";
 import { recordAudit } from "@/server/services/audit";
 import { increaseStock } from "@/server/services/inventory";
 import {
@@ -224,6 +224,7 @@ export async function deleteProduct(productId: string): Promise<ActionResult<und
   try {
     const ctx = await requireAuthContext();
     assertPermission(ctx, "PRODUCTS_DELETE");
+    assertOwner(ctx);
     if (!productId) return { ok: false, error: "Product not found." };
 
     const product = await ctx.db.product.findFirst({ where: { id: productId } });
