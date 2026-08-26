@@ -1,10 +1,11 @@
-import { requireAuthContext } from "@/server/auth/context";
+import { assertPermission, requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NewBranchForm } from "./new-branch-form";
 
 export default async function BranchesPage() {
   const ctx = await requireAuthContext();
+  assertPermission(ctx, "BRANCHES_MANAGE");
   const branches = await ctx.db.branch.findMany({
     include: { warehouses: true, registers: true },
     orderBy: { createdAt: "asc" },

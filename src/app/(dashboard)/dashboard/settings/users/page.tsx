@@ -1,4 +1,4 @@
-import { requireAuthContext } from "@/server/auth/context";
+import { assertPermission, requireAuthContext } from "@/server/auth/context";
 import { rawPrisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { InviteUserForm } from "./invite-user-form";
 
 export default async function UsersPage() {
   const ctx = await requireAuthContext();
+  assertPermission(ctx, "USERS_MANAGE");
 
   const [memberships, roles, branches] = await Promise.all([
     rawPrisma.userOrganization.findMany({

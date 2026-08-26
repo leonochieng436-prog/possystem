@@ -42,6 +42,18 @@ export default async function DashboardLayout({
     rawPrisma.user.findUniqueOrThrow({ where: { id: ctx.userId } }),
     ctx.db.branch.count({ where: { isActive: true } }),
   ]);
+  const canOpenSettings = [
+    "SETTINGS_MANAGE",
+    "BRANCHES_MANAGE",
+    "USERS_MANAGE",
+    "ROLES_MANAGE",
+    "AUDIT_LOG_VIEW",
+  ].some((permission) => ctx.permissions.has(permission));
+  const adminNav = NAV.slice(9).filter((item) =>
+    item.href === "/dashboard/billing"
+      ? ctx.permissions.has("BILLING_MANAGE")
+      : canOpenSettings
+  );
 
   return (
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[252px_1fr]">
@@ -66,7 +78,7 @@ export default async function DashboardLayout({
           <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace</p>
           <DashboardNav items={NAV.slice(0, 9)} />
           <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Administration</p>
-          <DashboardNav items={NAV.slice(9)} />
+          <DashboardNav items={adminNav} />
         </div>
         <div className="border-t border-border p-3">
           <div className="flex items-center justify-between px-2 py-1.5">
