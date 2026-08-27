@@ -61,7 +61,7 @@ export async function requireAuthContext(): Promise<AuthContext> {
   }
 
   const userBranches = await rawPrisma.userBranch.findMany({
-    where: { userId: session.userId },
+    where: { userId: session.userId, branch: { organizationId } },
     select: { branchId: true },
   });
 

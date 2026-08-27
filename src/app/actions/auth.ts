@@ -114,7 +114,7 @@ export async function registerOrganization(
     });
 
     return { org, user };
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   await recordAudit({
     organizationId: result.org.id,
@@ -124,6 +124,7 @@ export async function registerOrganization(
     entityId: result.org.id,
   });
 
+  await destroyCurrentSession();
   const h = await headers();
   await createSession({
     userId: result.user.id,
@@ -182,6 +183,7 @@ export async function login(
     };
   }
 
+  await destroyCurrentSession();
   const h = await headers();
   await createSession({
     userId: user.id,

@@ -82,6 +82,25 @@ export async function setSessionOrganization(
   sessionId: string,
   organizationId: string
 ) {
+  const session = await rawPrisma.session.findUnique({
+    where: { id: sessionId },
+    select: { userId: true },
+  });
+  if (!session) throw new Error("Session not found");
+
+  const membership = await rawPrisma.userOrganization.findUnique({
+    where: {
+      userId_organizationId: {
+        userId: session.userId,
+        organizationId,
+      },
+    },
+    select: { isActive: true },
+  });
+  if (!membership?.isActive) {
+    throw new Error("User does not have access to this organization");
+  }
+
   await rawPrisma.session.update({
     where: { id: sessionId },
     data: { organizationId },
