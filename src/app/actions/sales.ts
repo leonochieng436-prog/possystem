@@ -82,7 +82,16 @@ export async function closeCashSession(raw: unknown): Promise<ActionResult<undef
     if (!summary) return { ok: false, error: "Open cash session not found." };
     const expected = new Decimal(summary.expectedCash);
     const actual = new Decimal(input.actualBalance);
-    await ctx.db.cashSession.update({ where: { id: session.id }, data: { status: "CLOSED", expectedBalance: expected.toFixed(2), actualBalance: actual.toFixed(2), variance: actual.minus(expected).toFixed(2), closedAt: new Date() } });
+    const cashRemoved = new Decimal(input.cashRemoved);
+    const variance = actual.minus(expected);
+    if (summary.heldSales > 0) return { ok: false, error: `Resolve ${summary.heldSales} held sale${summary.heldSales === 1 ? "" : "s"} before closing this register.` };
+    if (cashRemoved.greaterThan(actual)) return { ok: false, error: "Cash removed cannot exceed counted cash." };
+    if (!variance.isZero() && !input.varianceReason?.trim()) return { ok: false, error: "Explain the cash variance before closing." };
+    await ctx.db.$transaction(async (tx) => {
+      await tx.cashSession.update({ where: { id: session.id, status: "OPEN" }, data: { status: "CLOSED", expectedBalance: expected.toFixed(2), actualBalance: actual.toFixed(2), variance: variance.toFixed(2), cashRemoved: cashRemoved.toFixed(2), closingFloat: actual.minus(cashRemoved).toFixed(2), varianceReason: input.varianceReason?.trim() || null, closingNote: input.closingNote?.trim() || null, denominationCounts: input.denominationCounts ?? undefined, closedAt: new Date() } });
+      if (cashRemoved.gt(0)) await tx.cashMovement.create({ data: { cashSessionId: session.id, type: "WITHDRAWAL", amount: cashRemoved.toFixed(2), note: "Cash removed during register closing" } });
+    });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "CASH_SESSION_CLOSED", entityType: "CashSession", entityId: session.id, metadata: { expectedCash: expected.toFixed(2), actualCash: actual.toFixed(2), variance: variance.toFixed(2), cashRemoved: cashRemoved.toFixed(2), varianceReason: input.varianceReason || null } });
     revalidatePath("/dashboard/pos"); revalidatePath("/dashboard"); revalidatePath("/dashboard/reports"); return { ok: true, data: undefined };
   } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; throw e; }
 }

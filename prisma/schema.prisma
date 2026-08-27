@@ -837,6 +837,11 @@ model CashSession {
   expectedBalance Decimal? @db.Decimal(14, 2)
   actualBalance   Decimal? @db.Decimal(14, 2)
   variance        Decimal? @db.Decimal(14, 2)
+  cashRemoved     Decimal? @db.Decimal(14, 2)
+  closingFloat    Decimal? @db.Decimal(14, 2)
+  varianceReason  String?
+  closingNote     String?
+  denominationCounts Json?
   openedAt        DateTime @default(now())
   closedAt        DateTime?
 

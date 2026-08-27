@@ -13,4 +13,11 @@ export const saleSchema = z.object({
 export type SaleInput = z.infer<typeof saleSchema>;
 
 export const cashSessionSchema = z.object({ branchId: z.string().min(1), registerId: z.string().min(1), openingBalance: z.string().min(1).refine((value) => Number(value) >= 0) });
-export const closeCashSessionSchema = z.object({ sessionId: z.string().min(1), actualBalance: z.string().min(1).refine((value) => Number(value) >= 0) });
+export const closeCashSessionSchema = z.object({
+  sessionId: z.string().min(1),
+  actualBalance: z.string().min(1).refine((value) => Number(value) >= 0),
+  cashRemoved: z.string().min(1).refine((value) => Number(value) >= 0).default("0"),
+  varianceReason: z.string().max(80).optional().or(z.literal("")),
+  closingNote: z.string().max(500).optional().or(z.literal("")),
+  denominationCounts: z.record(z.string(), z.string()).optional(),
+});
