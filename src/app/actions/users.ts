@@ -114,3 +114,54 @@ export async function deactivateUser(userId: string): Promise<ActionResult<undef
     throw e;
   }
 }
+
+export async function updateUser(userId: string, raw: unknown): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "USERS_MANAGE");
+    assertOwner(ctx);
+    if (!userId || userId === ctx.userId) return { ok: false, error: "You cannot edit yourself here." };
+    const parsed = inviteUserSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, error: "Please fix the user details." };
+    const input = parsed.data;
+    const membership = await rawPrisma.userOrganization.findUnique({ where: { userId_organizationId: { userId, organizationId: ctx.organizationId } } });
+    if (!membership || membership.isOwner) return { ok: false, error: "That team member cannot be edited." };
+    const email = input.email.toLowerCase();
+    const existingUser = await rawPrisma.user.findUnique({ where: { email } });
+    if (existingUser && existingUser.id !== userId) return { ok: false, error: "That email is already in use." };
+    await rawPrisma.$transaction([
+      rawPrisma.user.update({ where: { id: userId }, data: { name: input.name, email } }),
+      rawPrisma.userOrganization.update({ where: { id: membership.id }, data: { roleId: input.roleId } }),
+      rawPrisma.userBranch.deleteMany({ where: { userId } }),
+      ...(input.branchIds.length > 0 ? [rawPrisma.userBranch.createMany({ data: input.branchIds.map((branchId) => ({ userId, branchId })) })] : []),
+    ]);
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_UPDATED", entityType: "User", entityId: userId, metadata: { email, roleId: input.roleId } });
+    revalidatePath("/dashboard/settings/users");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+export async function resetUserPassword(userId: string): Promise<ActionResult<{ temporaryPassword: string }>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "USERS_MANAGE");
+    assertOwner(ctx);
+    if (!userId || userId === ctx.userId) return { ok: false, error: "Use your own account password settings to change this password." };
+    const membership = await rawPrisma.userOrganization.findUnique({ where: { userId_organizationId: { userId, organizationId: ctx.organizationId } } });
+    if (!membership || membership.isOwner) return { ok: false, error: "That team member cannot be reset." };
+    const temporaryPassword = randomBytes(6).toString("base64url");
+    await rawPrisma.$transaction([
+      rawPrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(temporaryPassword) } }),
+      rawPrisma.session.deleteMany({ where: { userId } }),
+    ]);
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_PASSWORD_RESET", entityType: "User", entityId: userId });
+    revalidatePath("/dashboard/settings/users");
+    return { ok: true, data: { temporaryPassword } };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}

@@ -75,3 +75,41 @@ export async function createBranch(raw: unknown): Promise<ActionResult<{ id: str
     throw e;
   }
 }
+
+export async function updateBranch(branchId: string, raw: unknown): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "BRANCHES_MANAGE");
+    assertOwner(ctx);
+    const parsed = createBranchSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, error: "Please fix the branch details." };
+    const input = parsed.data;
+    const existing = await ctx.db.branch.findFirst({ where: { code: input.code.toUpperCase() } });
+    if (existing && existing.id !== branchId) return { ok: false, error: "A branch with this code already exists." };
+    await ctx.db.branch.update({ where: { id: branchId }, data: { name: input.name, code: input.code.toUpperCase(), address: input.address || null, phone: input.phone || null } });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "BRANCH_UPDATED", entityType: "Branch", entityId: branchId, metadata: { name: input.name, code: input.code.toUpperCase() } });
+    revalidatePath("/dashboard/settings/branches");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+export async function deactivateBranch(branchId: string): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "BRANCHES_MANAGE");
+    assertOwner(ctx);
+    const branch = await ctx.db.branch.findFirst({ where: { id: branchId } });
+    if (!branch) return { ok: false, error: "Branch not found." };
+    await ctx.db.branch.update({ where: { id: branchId }, data: { isActive: false } });
+    await ctx.db.register.updateMany({ where: { branchId }, data: { isActive: false } });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "BRANCH_DEACTIVATED", entityType: "Branch", entityId: branchId });
+    revalidatePath("/dashboard/settings/branches");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}

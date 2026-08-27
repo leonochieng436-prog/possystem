@@ -141,10 +141,12 @@ export default async function ReportsPage({
     }));
 
   const paymentTotals = new Map<string, Decimal>();
+  const paymentCounts = new Map<string, number>();
   for (const sale of sales) {
     for (const payment of sale.payments) {
       const method = formatSaleLabel(payment.method);
       paymentTotals.set(method, (paymentTotals.get(method) ?? new Decimal(0)).plus(toDecimal(payment.amount)));
+      paymentCounts.set(method, (paymentCounts.get(method) ?? 0) + 1);
     }
   }
   const paymentMethods = [...paymentTotals.entries()]
@@ -152,7 +154,7 @@ export default async function ReportsPage({
     .map(([name, amount], index, rows) => {
       const total = rows.reduce((sum, [, value]) => sum.plus(value), new Decimal(0));
       const share = total.isZero() ? 0 : amount.div(total).times(100).toNumber();
-      return { name, amount: amount.toNumber(), share: Number(share.toFixed(1)) };
+      return { name, amount: amount.toNumber(), count: paymentCounts.get(name) ?? 0, share: Number(share.toFixed(1)) };
     });
 
   const categoryTotals = new Map<string, Decimal>();
@@ -483,7 +485,7 @@ export default async function ReportsPage({
                   <div key={method.name} className="space-y-1.5">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{method.name}</span>
-                      <span className="font-tabular">{money(method.amount)}</span>
+                      <span className="font-tabular">{money(method.amount)} <span className="text-[11px] text-muted-foreground">({method.count} tenders)</span></span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
                       <div className="h-full rounded-full bg-primary" style={{ width: `${method.share}%` }} />

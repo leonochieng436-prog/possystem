@@ -21,6 +21,9 @@ export function PosForm({ branches, warehouses, registers, variants, customers }
   const [category, setCategory] = useState("All products");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MPESA" | "CARD" | "BANK_TRANSFER" | "CREDIT">("CASH");
   const [amountPaid, setAmountPaid] = useState("");
+  const [splitPayment, setSplitPayment] = useState(false);
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState<typeof paymentMethod>("MPESA");
+  const [secondPaymentAmount, setSecondPaymentAmount] = useState("");
   const [customerId, setCustomerId] = useState("");
 
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -34,7 +37,9 @@ export function PosForm({ branches, warehouses, registers, variants, customers }
   const cartLines = cart.map((line) => ({ ...line, variant: variants.find((item) => item.id === line.variantId)! })).filter((line) => line.variant);
   const total = cartLines.reduce((sum, line) => sum.plus(new Decimal(line.variant.price).times(line.quantity)), new Decimal(0));
   const received = new Decimal(amountPaid || 0);
-  const change = Decimal.max(received.minus(total), 0);
+  const secondReceived = new Decimal(secondPaymentAmount || 0);
+  const receivedTotal = received.plus(splitPayment ? secondReceived : 0);
+  const change = Decimal.max(receivedTotal.minus(total), 0);
 
   function addToCart(variantId: string) {
     setCart((current) => {
@@ -49,11 +54,11 @@ export function PosForm({ branches, warehouses, registers, variants, customers }
     event.preventDefault();
     setError("");
     const data = new FormData(event.currentTarget);
-    const payload = { branchId, registerId: String(data.get("registerId") || ""), warehouseId: String(data.get("warehouseId") || ""), customerId, paymentMethod, amountPaid: amountPaid || total.toString(), items: cart.map((line) => ({ variantId: line.variantId, quantity: String(line.quantity) })) };
+    const payload = { branchId, registerId: String(data.get("registerId") || ""), warehouseId: String(data.get("warehouseId") || ""), customerId, paymentMethod, amountPaid: amountPaid || total.toString(), payments: splitPayment ? [{ method: paymentMethod, amount: amountPaid || "0" }, { method: secondPaymentMethod, amount: secondPaymentAmount || "0" }] : undefined, items: cart.map((line) => ({ variantId: line.variantId, quantity: String(line.quantity) })) };
     startTransition(async () => {
       const result = await createSale(payload);
       if (!result.ok) return setError(result.error);
-      setCart([]); setAmountPaid(""); setCustomerId(""); router.push(`/dashboard/pos/receipts/${result.data.id}`);
+      setCart([]); setAmountPaid(""); setSecondPaymentAmount(""); setSplitPayment(false); setCustomerId(""); router.push(`/dashboard/pos/receipts/${result.data.id}`);
     });
   }
 
@@ -72,7 +77,10 @@ export function PosForm({ branches, warehouses, registers, variants, customers }
         <div className="border-t border-border px-5 py-4"><div className="space-y-2 text-sm"><div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="font-tabular">KES {total.toFixed(2)}</span></div><div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="font-tabular">KES 0.00</span></div><div className="mt-3 flex items-end justify-between border-t border-border pt-3"><span className="font-semibold">Total</span><span className="font-tabular text-2xl font-bold text-primary">KES {total.toFixed(2)}</span></div></div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1"><select name="registerId" required className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="">Register...</option>{visibleRegisters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="warehouseId" required className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="">Warehouse...</option>{visibleWarehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select value={branchId} onChange={(event) => setBranchId(event.target.value)} className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="">Branch...</option>{branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="">Walk-in customer</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
           <div className="mt-4"><p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Payment method</p><div className="grid grid-cols-2 gap-2">{(["CASH", "MPESA", "CARD", "BANK_TRANSFER", "CREDIT"] as const).map((method) => <button key={method} type="button" onClick={() => setPaymentMethod(method)} className={`rounded border px-2 py-2 text-[11px] font-semibold ${paymentMethod === method ? "border-primary bg-primary-tint text-primary" : "border-border-strong text-muted-foreground hover:border-primary"}`}>{method === "BANK_TRANSFER" ? "Bank" : method === "MPESA" ? "M-Pesa" : method[0] + method.slice(1).toLowerCase()}</button>)}</div></div>
-          <Input name="amountPaid" value={amountPaid} onChange={(event) => setAmountPaid(event.target.value)} type="number" min={total.toString()} step="0.01" placeholder={`Amount received · KES ${total.toFixed(2)}`} className="mt-3" required={paymentMethod !== "CREDIT"} />{paymentMethod === "CASH" && received.greaterThanOrEqualTo(total) && <div className="mt-2 flex justify-between rounded border border-success/20 bg-success-tint px-3 py-2 text-sm text-success"><span>Change</span><strong className="font-tabular">KES {change.toFixed(2)}</strong></div>}{error && <p className="mt-3 rounded border border-danger/20 bg-danger-tint px-3 py-2 text-[12px] text-danger">{error}</p>}<Button type="submit" disabled={pending || cartLines.length === 0} className="mt-4 h-12 w-full text-sm font-semibold">{pending ? "Completing sale..." : `Complete sale · KES ${total.toFixed(2)}`}<ArrowRight size={16} /></Button>
+          <Input name="amountPaid" value={amountPaid} onChange={(event) => setAmountPaid(event.target.value)} type="number" min="0" step="0.01" placeholder={`Amount received · KES ${total.toFixed(2)}`} className="mt-3" required={paymentMethod !== "CREDIT"} />
+          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} /> Use two payment methods</label>
+          {splitPayment && <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-1"><select value={secondPaymentMethod} onChange={(event) => setSecondPaymentMethod(event.target.value as typeof paymentMethod)} className="h-9 rounded border border-border-strong bg-surface px-2 text-sm">{(["CASH", "MPESA", "CARD", "BANK_TRANSFER", "CREDIT"] as const).map((method) => <option key={method} value={method}>{method === "BANK_TRANSFER" ? "Bank transfer" : method === "MPESA" ? "M-Pesa" : method[0] + method.slice(1).toLowerCase()}</option>)}</select><Input value={secondPaymentAmount} onChange={(event) => setSecondPaymentAmount(event.target.value)} type="number" min="0" step="0.01" placeholder="Second payment amount" /></div>}
+          {paymentMethod === "CASH" && receivedTotal.greaterThanOrEqualTo(total) && <div className="mt-2 flex justify-between rounded border border-success/20 bg-success-tint px-3 py-2 text-sm text-success"><span>Change</span><strong className="font-tabular">KES {change.toFixed(2)}</strong></div>}{error && <p className="mt-3 rounded border border-danger/20 bg-danger-tint px-3 py-2 text-[12px] text-danger">{error}</p>}<Button type="submit" disabled={pending || cartLines.length === 0 || receivedTotal.lessThan(total) && ![paymentMethod, secondPaymentMethod].includes("CREDIT")} className="mt-4 h-12 w-full text-sm font-semibold">{pending ? "Completing sale..." : `Complete sale · KES ${total.toFixed(2)}`}<ArrowRight size={16} /></Button>
         </div>
       </aside>
     </form>

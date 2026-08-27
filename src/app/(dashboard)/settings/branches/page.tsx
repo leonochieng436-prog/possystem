@@ -2,6 +2,7 @@ import { requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NewBranchForm } from "./new-branch-form";
+import { BranchActions } from "./branch-actions";
 
 export default async function BranchesPage() {
   const ctx = await requireAuthContext();
@@ -34,9 +35,7 @@ export default async function BranchesPage() {
                     {b.registers.length} register(s)
                   </p>
                 </div>
-                <Badge variant={b.isActive ? "success" : "neutral"}>
-                  {b.isActive ? "Active" : "Inactive"}
-                </Badge>
+                <div className="flex items-center gap-3"><Badge variant={b.isActive ? "success" : "neutral"}>{b.isActive ? "Active" : "Inactive"}</Badge>{b.isActive && <BranchActions branch={{ id: b.id, name: b.name, code: b.code, address: b.address, phone: b.phone }} />}</div>
               </li>
             ))}
           </ul>

@@ -12,6 +12,8 @@ function databaseUrlWithConnectionTimeout() {
   if (!url.searchParams.has("connect_timeout")) {
     url.searchParams.set("connect_timeout", "15");
   }
+  url.searchParams.set("connection_limit", process.env.PRISMA_CONNECTION_LIMIT ?? "5");
+  url.searchParams.set("pool_timeout", process.env.PRISMA_POOL_TIMEOUT ?? "30");
   return url.toString();
 }
 

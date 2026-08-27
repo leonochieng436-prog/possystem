@@ -56,8 +56,8 @@ export default async function DashboardLayout({
   );
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[252px_1fr]">
-      <aside className="hidden border-r border-border bg-surface lg:flex lg:flex-col">
+    <div className="min-h-screen bg-background lg:h-screen lg:overflow-hidden lg:grid lg:grid-cols-[252px_1fr]">
+      <aside className="scrollbar-hidden hidden border-r border-border bg-surface lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">
         <div className="border-b border-border px-5 py-5">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-md)] bg-primary text-primary-foreground shadow-[0_5px_14px_rgba(15,123,108,0.2)]">
@@ -101,7 +101,7 @@ export default async function DashboardLayout({
         </div>
       </aside>
 
-      <div className="flex flex-col min-h-screen">
+      <div className="flex min-h-screen min-w-0 flex-col lg:h-screen">
         <header className="flex h-[72px] items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
           <div className="flex items-center gap-3 lg:hidden">
             <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"><Store size={17} /></span>
@@ -117,7 +117,7 @@ export default async function DashboardLayout({
             <Menu size={18} className="text-muted-foreground lg:hidden" />
           </div>
         </header>
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

@@ -29,6 +29,8 @@
   --warning-tint: #fdf1dc;
   --success: #146c43;
   --success-tint: #e6f4ea;
+  --info: #2563a6;
+  --info-tint: #e8f1fb;
 
   --ring: #0f7b6c;
 
@@ -55,6 +57,8 @@
   --color-warning-tint: var(--warning-tint);
   --color-success: var(--success);
   --color-success-tint: var(--success-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -64,6 +68,15 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 .font-tabular {
@@ -83,6 +96,44 @@ body {
 
 .metric-card {
   transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.metric-card-revenue {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+
+.metric-card-profit {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+.metric-card-stock-warning {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+
+.metric-card-stock-healthy {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+.metric-card-customers {
+  border-color: color-mix(in srgb, var(--info) 28%, var(--border));
+  background: var(--info-tint);
+  color: var(--info);
+}
+
+.metric-card-revenue .text-muted-foreground,
+.metric-card-profit .text-muted-foreground,
+.metric-card-stock-warning .text-muted-foreground,
+.metric-card-stock-healthy .text-muted-foreground,
+.metric-card-customers .text-muted-foreground {
+  color: color-mix(in srgb, currentColor 72%, var(--foreground));
 }
 
 .metric-card:hover {

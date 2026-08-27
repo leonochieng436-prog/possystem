@@ -7,6 +7,7 @@ export const saleSchema = z.object({
   customerId: z.string().optional().or(z.literal("")),
   paymentMethod: z.enum(["CASH", "MPESA", "CARD", "BANK_TRANSFER", "CREDIT", "OTHER"]),
   amountPaid: z.string().min(1).refine((value) => Number(value) >= 0),
+  payments: z.array(z.object({ method: z.enum(["CASH", "MPESA", "CARD", "BANK_TRANSFER", "CREDIT", "OTHER"]), amount: z.string().min(1).refine((value) => Number(value) >= 0) })).min(1).max(2).optional(),
   items: z.array(z.object({ variantId: z.string().min(1), quantity: z.string().min(1).refine((value) => Number(value) > 0) })).min(1),
 });
 export type SaleInput = z.infer<typeof saleSchema>;

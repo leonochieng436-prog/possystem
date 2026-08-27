@@ -3,15 +3,17 @@ import { rawPrisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InviteUserForm } from "./invite-user-form";
+import { UserActions } from "./user-actions";
 
 export default async function UsersPage() {
   const ctx = await requireAuthContext();
+  if (!ctx.permissions.has("USERS_MANAGE")) return null;
 
   const [memberships, roles, branches] = await Promise.all([
     rawPrisma.userOrganization.findMany({
       where: { organizationId: ctx.organizationId },
       include: {
-        user: true,
+        user: { include: { branches: true } },
         role: true,
       },
       orderBy: { createdAt: "asc" },
@@ -47,7 +49,7 @@ export default async function UsersPage() {
                   </p>
                   <p className="text-[12px] text-muted-foreground">{m.user.email}</p>
                 </div>
-                <Badge variant="primary">{m.role.name}</Badge>
+                <div className="flex items-center gap-3"><Badge variant="primary">{m.role.name}</Badge>{!m.isOwner && <UserActions member={{ id: m.user.id, name: m.user.name, email: m.user.email, roleId: m.role.id, branchIds: m.user.branches.map((branch) => branch.branchId) }} roles={roles.map((r) => ({ id: r.id, name: r.name }))} branches={branches.map((b) => ({ id: b.id, name: b.name }))} />}</div>
               </li>
             ))}
           </ul>

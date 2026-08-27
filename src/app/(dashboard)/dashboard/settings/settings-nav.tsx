@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Archive,
   Banknote,
@@ -53,6 +53,8 @@ const ICONS = {
 
 export function SettingsNav({ groups }: { groups: { label: string; items: SettingsItem[] }[] }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeSection = searchParams.get("section");
 
   return (
     <nav className="space-y-6" aria-label="Settings navigation">
@@ -64,7 +66,8 @@ export function SettingsNav({ groups }: { groups: { label: string; items: Settin
           <div className="space-y-1">
             {group.items.map((item) => {
               const Icon = ICONS[item.icon as keyof typeof ICONS];
-              const active = pathname === item.href;
+              const itemUrl = new URL(item.href, "http://settings.local");
+              const active = pathname === itemUrl.pathname && (itemUrl.searchParams.get("section") ?? null) === activeSection;
               if (!item.available) {
                 return (
                   <div key={item.label} className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground/60">
