@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAuthContext } from "@/server/auth/context";
+import { assertPermission, requireAuthContext } from "@/server/auth/context";
 
 export async function GET(request: Request) {
   const ctx = await requireAuthContext();
+  assertPermission(ctx, "REPORTS_EXPORT");
   const url = new URL(request.url);
   const from = new Date(url.searchParams.get("from") ?? new Date().toISOString());
   const to = new Date(url.searchParams.get("to") ?? new Date().toISOString());

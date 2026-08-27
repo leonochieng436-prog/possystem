@@ -2,6 +2,7 @@ import { assertPermission, requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NewBranchForm } from "./new-branch-form";
+import { ResourceActions } from "./resource-actions";
 
 export default async function BranchesPage() {
   const ctx = await requireAuthContext();
@@ -35,9 +36,8 @@ export default async function BranchesPage() {
                     {b.registers.length} register(s)
                   </p>
                 </div>
-                <Badge variant={b.isActive ? "success" : "neutral"}>
-                  {b.isActive ? "Active" : "Inactive"}
-                </Badge>
+                <div className="flex items-center gap-3"><Badge variant={b.isActive ? "success" : "neutral"}>{b.isActive ? "Active" : "Inactive"}</Badge>{b.isActive && <ResourceActions type="branch" id={b.id} name={b.name} />}</div>
+                {b.isActive && (b.warehouses.length > 0 || b.registers.length > 0) && <div className="col-span-full mt-2 space-y-2 border-t border-border pt-2 pl-4">{b.warehouses.map((warehouse) => <div key={warehouse.id} className="flex items-center justify-between text-[12px]"><span>{warehouse.name} <span className="text-muted-foreground">· warehouse</span></span>{warehouse.isActive && <ResourceActions type="warehouse" id={warehouse.id} name={warehouse.name} />}</div>)}{b.registers.map((register) => <div key={register.id} className="flex items-center justify-between text-[12px]"><span>{register.name} <span className="text-muted-foreground">· register</span></span>{register.isActive && <ResourceActions type="register" id={register.id} name={register.name} />}</div>)}</div>}
               </li>
             ))}
           </ul>

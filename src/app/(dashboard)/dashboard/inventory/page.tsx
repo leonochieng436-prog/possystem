@@ -4,6 +4,7 @@ import { assertPermission, requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AdjustStockForm } from "./adjust-stock-form";
+import { ExportLink } from "../reports/export-link";
 
 const money = new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 });
 
@@ -74,7 +75,7 @@ export default async function InventoryPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
         <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Stock control</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Inventory</h1><p className="mt-2 text-sm text-muted-foreground">Track stock across warehouses with an auditable movement ledger.</p></div>
-        <a href="#edit-inventory" className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_5px_14px_rgba(15,123,108,0.18)]"><Plus size={16} /> Stock adjustment</a>
+        <div className="flex gap-2"><ExportLink type="inventory" label="Export inventory" /><a href="#edit-inventory" className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_5px_14px_rgba(15,123,108,0.18)]"><Plus size={16} /> Stock adjustment</a></div>
       </div>
   <nav className="flex gap-5 overflow-x-auto border-b border-border pb-3 text-sm" aria-label="Inventory navigation"><a className="border-b-2 border-primary pb-3 font-semibold text-primary" href="/dashboard/inventory">Overview</a><a className="whitespace-nowrap text-muted-foreground" href="#stock-levels">Stock levels</a><a className="whitespace-nowrap text-muted-foreground" href="#movements">Movements</a><span className="whitespace-nowrap text-muted-foreground">Transfers · {transfers.length} pending</span><span className="whitespace-nowrap text-muted-foreground">Adjustments · {adjustments}</span></nav>
   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{kpis.map((item) => { const Icon = item.icon; return <Card key={item.label}><CardContent className="p-4"><div className="flex items-center justify-between"><p className="text-[12px] text-muted-foreground">{item.label}</p><Icon size={17} className="text-primary" /></div><p className="mt-4 text-xl font-semibold font-tabular">{item.value}</p><p className="mt-1 text-[12px] text-muted-foreground">{item.detail}</p></CardContent></Card>; })}</div>

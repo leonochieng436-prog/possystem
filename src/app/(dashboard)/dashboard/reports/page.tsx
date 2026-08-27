@@ -3,7 +3,7 @@ import { requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, BarChart3, CalendarDays, Download, Filter, Printer } from "lucide-react";
+import { ArrowUpRight, BarChart3, CalendarDays, Filter, Printer } from "lucide-react";
 import { getPreviousRange, resolveReportRange } from "@/lib/reports/range";
 import { ExportLink } from "./export-link";
 import { LineChart } from "@/components/charts/line-chart";
@@ -256,9 +256,7 @@ export default async function ReportsPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" className="gap-2">
-            <Download size={15} /> Export report
-          </Button>
+          <ExportLink from={getInputDate(rangeStart)} to={getInputDate(rangeEnd)} label="Export report" />
           <Button type="button" variant="secondary" className="gap-2">
             <Printer size={15} /> Print
           </Button>

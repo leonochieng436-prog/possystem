@@ -6,6 +6,7 @@ import { registerOrganization } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 
 const BUSINESS_TYPES = [
   { value: "general_store", label: "General store" },
@@ -25,6 +26,7 @@ export function RegisterForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -52,12 +54,16 @@ export function RegisterForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-5">
+    <form action={handleSubmit} className="register-form space-y-6">
+      <div className="mb-8 flex items-center gap-3 lg:hidden">
+        <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-sm)] bg-primary text-white shadow-[0_8px_18px_rgba(15,123,108,0.22)]">D</span>
+        <span className="text-lg font-bold tracking-[0.16em] text-foreground">DUKAOS</span>
+      </div>
       <div>
-        <h1 className="text-xl font-semibold">Set up your business</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Free 14-day trial. No card required.
-        </p>
+        <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-primary-tint text-primary"><Building2 size={22} /></div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Create your workspace</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Set up DUKAOS</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Start managing sales, stock, customers, and payments in one secure business workspace.</p>
       </div>
 
       {error && (
@@ -66,15 +72,15 @@ export function RegisterForm() {
         </div>
       )}
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="businessName">Business name</Label>
-        <Input id="businessName" name="businessName" placeholder="Leon Retail Store" required />
+        <div className="relative"><Building2 size={17} className="pointer-events-none absolute left-3 top-3 text-muted-foreground" /><Input id="businessName" name="businessName" placeholder="Leon Retail Store" required className="h-11 pl-10" /></div>
         {fieldErrors.businessName && (
           <p className="text-[12px] text-danger">{fieldErrors.businessName[0]}</p>
         )}
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="businessType">Business type</Label>
         <select
           id="businessType"
@@ -90,40 +96,40 @@ export function RegisterForm() {
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
           <Label htmlFor="ownerName">Your name</Label>
-          <Input id="ownerName" name="ownerName" placeholder="Leon Otieno" required />
+          <div className="relative"><UserRound size={17} className="pointer-events-none absolute left-3 top-3 text-muted-foreground" /><Input id="ownerName" name="ownerName" placeholder="Leon Otieno" required className="h-11 pl-10" /></div>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" placeholder="07xx xxx xxx" />
+          <div className="relative"><Phone size={17} className="pointer-events-none absolute left-3 top-3 text-muted-foreground" /><Input id="phone" name="phone" placeholder="07xx xxx xxx" className="h-11 pl-10" /></div>
         </div>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" placeholder="you@business.co.ke" required />
+        <div className="relative"><Mail size={17} className="pointer-events-none absolute left-3 top-3 text-muted-foreground" /><Input id="email" name="email" type="email" placeholder="you@business.co.ke" required className="h-11 pl-10" /></div>
         {fieldErrors.email && (
           <p className="text-[12px] text-danger">{fieldErrors.email[0]}</p>
         )}
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" placeholder="At least 8 characters" required />
+        <div className="relative"><LockKeyhole size={17} className="pointer-events-none absolute left-3 top-3 text-muted-foreground" /><Input id="password" name="password" type={showPassword ? "text" : "password"} placeholder="At least 8 characters" required className="h-11 pl-10 pr-11" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded text-muted-foreground hover:bg-surface-muted hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>
         {fieldErrors.password && (
           <p className="text-[12px] text-danger">{fieldErrors.password[0]}</p>
         )}
       </div>
 
-      <Button type="submit" size="lg" className="w-full" disabled={isPending}>
-        {isPending ? "Creating your workspace…" : "Create business account"}
+      <Button type="submit" size="lg" className="h-12 w-full justify-center gap-2 bg-primary text-white shadow-[0_10px_22px_rgba(15,123,108,0.2)] hover:bg-primary-hover" disabled={isPending}>
+        {isPending ? "Creating your workspace…" : "Create business account"} {!isPending && <ArrowRight size={17} />}
       </Button>
 
-      <p className="text-center text-[13px] text-muted-foreground">
+      <p className="border-t border-border pt-5 text-center text-[13px] text-muted-foreground">
         Already have an account?{" "}
-        <a href="/login" className="text-primary hover:underline">
+        <a href="/login" className="font-semibold text-primary hover:underline">
           Log in
         </a>
       </p>

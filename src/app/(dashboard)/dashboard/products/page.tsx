@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import Decimal from "decimal.js";
 import { ProductActions } from "./product-actions";
 import { Archive, Boxes, Package, Plus, Search, Tag } from "lucide-react";
+import { ExportLink } from "../reports/export-link";
 
 const money = new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 });
 
@@ -62,7 +63,7 @@ export default async function ProductsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Catalog control</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Products</h1><p className="mt-2 text-sm text-muted-foreground">Manage the catalog that powers pricing, purchasing, POS, and inventory.</p></div><Link href="/dashboard/products/new"><Button><Plus size={16} /> Add product</Button></Link></div>
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Catalog control</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Products</h1><p className="mt-2 text-sm text-muted-foreground">Manage the catalog that powers pricing, purchasing, POS, and inventory.</p></div><div className="flex gap-2"><ExportLink type="products" label="Export products" /><Link href="/dashboard/products/new"><Button><Plus size={16} /> Add product</Button></Link></div></div>
       <nav className="flex gap-5 overflow-x-auto border-b border-border pb-3 text-sm" aria-label="Product navigation"><Link className="whitespace-nowrap border-b-2 border-primary pb-3 font-semibold text-primary" href="/dashboard/products">All products</Link><span className="whitespace-nowrap text-muted-foreground">Categories · {categories.length}</span><span className="whitespace-nowrap text-muted-foreground">Brands · {brands.length}</span><span className="whitespace-nowrap text-muted-foreground">Variants · {variantsCount}</span><span className="whitespace-nowrap text-muted-foreground">Pricing</span><span className="whitespace-nowrap text-muted-foreground">Import / export</span></nav>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{kpis.map((item) => { const Icon = item.icon; return <Card key={item.label}><CardContent className="p-4"><div className="flex items-center justify-between"><p className="text-[12px] text-muted-foreground">{item.label}</p><Icon size={17} className="text-primary" /></div><p className="mt-4 text-xl font-semibold font-tabular">{item.value}</p><p className="mt-1 text-[12px] text-muted-foreground">{item.detail}</p></CardContent></Card>; })}</div>
 

@@ -104,9 +104,48 @@ export async function deactivateBranch(branchId: string): Promise<ActionResult<u
     const branch = await ctx.db.branch.findFirst({ where: { id: branchId } });
     if (!branch) return { ok: false, error: "Branch not found." };
     await ctx.db.branch.update({ where: { id: branchId }, data: { isActive: false } });
+    await ctx.db.warehouse.updateMany({ where: { branchId }, data: { isActive: false } });
     await ctx.db.register.updateMany({ where: { branchId }, data: { isActive: false } });
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "BRANCH_DEACTIVATED", entityType: "Branch", entityId: branchId });
     revalidatePath("/dashboard/settings/branches");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+export async function deactivateWarehouse(warehouseId: string): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "BRANCHES_MANAGE");
+    assertOwner(ctx);
+    const warehouse = await ctx.db.warehouse.findFirst({ where: { id: warehouseId }, select: { id: true, branchId: true } });
+    if (!warehouse) return { ok: false, error: "Warehouse not found." };
+    await ctx.db.warehouse.update({ where: { id: warehouse.id }, data: { isActive: false } });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "WAREHOUSE_DEACTIVATED", entityType: "Warehouse", entityId: warehouse.id });
+    revalidatePath("/dashboard/settings/branches");
+    revalidatePath("/dashboard/settings");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+export async function deactivateRegister(registerId: string): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "BRANCHES_MANAGE");
+    assertOwner(ctx);
+    const register = await ctx.db.register.findFirst({ where: { id: registerId, branch: { organizationId: ctx.organizationId } }, select: { id: true } });
+    if (!register) return { ok: false, error: "Register not found." };
+    const openSession = await ctx.db.cashSession.findFirst({ where: { registerId: register.id, status: "OPEN" } });
+    if (openSession) return { ok: false, error: "Close the open cash session before deleting this register." };
+    await ctx.db.register.update({ where: { id: register.id }, data: { isActive: false } });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "REGISTER_DEACTIVATED", entityType: "Register", entityId: register.id });
+    revalidatePath("/dashboard/settings/branches");
+    revalidatePath("/dashboard/settings");
     return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof AuthError) return { ok: false, error: e.message };
