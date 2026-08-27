@@ -52,7 +52,7 @@ export async function createPurchaseOrder(raw: unknown): Promise<ActionResult<{ 
     if (!warehouse) return { ok: false, error: "Warehouse does not belong to the selected branch." };
     const supplier = await ctx.db.supplier.findFirst({ where: { id: input.supplierId, isActive: true } });
     if (!supplier) return { ok: false, error: "Supplier not found." };
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true } } });
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true, organizationId: ctx.organizationId } } });
     if (variants.length !== input.items.length) return { ok: false, error: "One or more products were not found." };
 
     const totals = input.items.reduce((sum, item) => sum.plus(new Decimal(item.quantity).times(item.unitCost)), new Decimal(0));
@@ -127,6 +127,10 @@ export async function createSupplierInvoice(raw: unknown): Promise<ActionResult<
     const input = parsed.data;
     const supplier = await ctx.db.supplier.findFirst({ where: { id: input.supplierId, isActive: true } });
     if (!supplier) return { ok: false, error: "Supplier not found." };
+    if (input.purchaseOrderId) {
+      const purchaseOrder = await ctx.db.purchaseOrder.findFirst({ where: { id: input.purchaseOrderId, supplierId: supplier.id } });
+      if (!purchaseOrder) return { ok: false, error: "Purchase order not found for this supplier." };
+    }
     await ctx.db.supplierInvoice.create({ data: { organizationId: ctx.organizationId, supplierId: supplier.id, purchaseOrderId: input.purchaseOrderId || null, invoiceNumber: input.invoiceNumber, amount: input.amount, dueDate: input.dueDate ? new Date(input.dueDate) : null } });
     revalidatePath("/dashboard/purchases");
     return { ok: true, data: undefined };

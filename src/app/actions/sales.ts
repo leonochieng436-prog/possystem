@@ -16,7 +16,7 @@ export async function openCashSession(raw: unknown): Promise<ActionResult<undefi
     const ctx = await requireAuthContext(); assertPermission(ctx, "CASH_SESSION_OPEN");
     const parsed = cashSessionSchema.safeParse(raw); if (!parsed.success) return { ok: false, error: "Enter a valid opening balance." };
     const input = parsed.data; assertBranchAccess(ctx, input.branchId);
-    const register = await ctx.db.register.findFirst({ where: { id: input.registerId, branchId: input.branchId, isActive: true } });
+    const register = await ctx.db.register.findFirst({ where: { id: input.registerId, branchId: input.branchId, branch: { organizationId: ctx.organizationId }, isActive: true } });
     if (!register) return { ok: false, error: "Register not found." };
     const open = await ctx.db.cashSession.findFirst({ where: { registerId: register.id, status: "OPEN" } });
     if (open) return { ok: false, error: "This register already has an open session." };
@@ -34,10 +34,11 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
     const paymentTotal = payments.reduce((sum, payment) => sum.plus(payment.amount), new Decimal(0));
     if (payments.some((payment) => payment.method === "CREDIT") && !input.customerId) return { ok: false, error: "Select a customer for credit sales." };
     const branch = await ctx.db.branch.findFirst({ where: { id: input.branchId, isActive: true } });
-    const register = await ctx.db.register.findFirst({ where: { id: input.registerId, branchId: input.branchId, isActive: true } });
+    const register = await ctx.db.register.findFirst({ where: { id: input.registerId, branchId: input.branchId, branch: { organizationId: ctx.organizationId }, isActive: true } });
     const warehouse = await ctx.db.warehouse.findFirst({ where: { id: input.warehouseId, branchId: input.branchId, isActive: true } });
     if (!branch || !register || !warehouse) return { ok: false, error: "Branch, register, or warehouse not found." };
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true } }, include: { product: true } });
+    if (input.customerId && !(await ctx.db.customer.findFirst({ where: { id: input.customerId } }))) return { ok: false, error: "Customer not found." };
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true, organizationId: ctx.organizationId } }, include: { product: true } });
     if (variants.length !== input.items.length) return { ok: false, error: "One or more products were not found." };
     const lines = input.items.map((item) => { const variant = variants.find((candidate) => candidate.id === item.variantId)!; const quantity = new Decimal(item.quantity); const price = new Decimal(variant.sellingPrice.toString()); return { ...item, quantity, price, total: quantity.times(price), variant }; });
     const subtotal = lines.reduce((sum, line) => sum.plus(line.total), new Decimal(0));
@@ -52,13 +53,13 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
       }
       const amountPaid = paymentTotal; if (amountPaid.lessThan(subtotal) && !payments.some((payment) => payment.method === "CREDIT")) throw new Error("Payment is less than the sale total.");
       if (input.customerId && payments.some((payment) => payment.method === "CREDIT")) {
-        const customer = await tx.customer.findUnique({ where: { id: input.customerId } });
+        const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: ctx.organizationId } });
         if (!customer) throw new Error("Customer not found.");
         const existingCredit = await tx.sale.aggregate({ where: { customerId: customer.id, isCreditSale: true, status: "COMPLETED" }, _sum: { total: true, amountPaid: true } });
         const outstanding = new Decimal(existingCredit._sum.total?.toString() ?? 0).minus(existingCredit._sum.amountPaid?.toString() ?? 0);
         if (outstanding.plus(subtotal.minus(amountPaid)).greaterThan(customer.creditLimit.toString())) throw new Error("This sale would exceed the customer's credit limit.");
       }
-      const session = await tx.cashSession.findFirst({ where: { registerId: register.id, status: "OPEN" } });
+      const session = await tx.cashSession.findFirst({ where: { registerId: register.id, branchId: branch.id, organizationId: ctx.organizationId, status: "OPEN" } });
       if (!session) throw new Error("Open the register before completing a sale.");
       const created = await tx.sale.create({ data: { organizationId: ctx.organizationId, branchId: branch.id, registerId: register.id, cashierId: ctx.userId, cashSessionId: session?.id, receiptNumber: `R-${Date.now()}`, subtotal: subtotal.toFixed(2), total: subtotal.toFixed(2), cogsTotal: cogs.toFixed(2), amountPaid: amountPaid.toFixed(2), changeGiven: Decimal.max(amountPaid.minus(subtotal), 0).toFixed(2), isCreditSale: payments.some((payment) => payment.method === "CREDIT"), customerId: input.customerId || null, items: { create: saleItems }, payments: { create: payments.map((payment) => ({ organizationId: ctx.organizationId, method: payment.method, amount: payment.amount })) } } });
       const cashPaid = payments.filter((payment) => payment.method === "CASH").reduce((sum, payment) => sum.plus(payment.amount), new Decimal(0));

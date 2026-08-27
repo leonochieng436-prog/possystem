@@ -1,5 +1,4 @@
 import { requireAuthContext } from "@/server/auth/context";
-import { rawPrisma } from "@/server/db/client";
 import Link from "next/link";
 import Decimal from "decimal.js";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,13 +12,12 @@ export default async function DashboardPage() {
   const startOfDay = new Date(today);
   startOfDay.setHours(0, 0, 0, 0);
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const formattedDate = today.toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   const [organization, branchCount, memberCount, todaySales, monthSales, products, customers, recentSales, todayReturns] = await Promise.all([
-    rawPrisma.organization.findUniqueOrThrow({ where: { id: ctx.organizationId } }),
+    ctx.db.organization.findUniqueOrThrow({ where: { id: ctx.organizationId } }),
     ctx.db.branch.count(),
-    rawPrisma.userOrganization.count({
-      where: { organizationId: ctx.organizationId, isActive: true },
-    }),
+    ctx.db.userOrganization.count({ where: { isActive: true } }),
     ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfDay } }, select: { total: true, cogsTotal: true, discountTotal: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
     ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfMonth } }, select: { total: true, cogsTotal: true } }),
     ctx.db.product.findMany({ where: { isActive: true }, select: { id: true, name: true, imageUrl: true, variants: { select: { reorderLevel: true, inventoryItems: { select: { quantity: true } } } } }, orderBy: { updatedAt: "desc" }, take: 5 }),
@@ -56,7 +54,8 @@ export default async function DashboardPage() {
       <section className="dashboard-hero flex flex-col justify-between gap-6 rounded-[var(--radius-lg)] px-6 py-7 text-white shadow-[0_14px_30px_rgba(15,123,108,0.14)] sm:flex-row sm:items-end sm:px-8">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/65">{organization.name} · All Branches</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Good morning, Leon</h1>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Good morning, {ctx.userName}</h1>
+          <p className="mt-2 text-sm text-white/75">{formattedDate}</p>
           <p className="mt-2 max-w-md text-sm text-white/75">Here&apos;s what&apos;s happening across your business today.</p>
         </div>
         <Link href="/dashboard/pos" className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-white px-4 text-sm font-semibold text-primary transition-transform hover:-translate-y-0.5">

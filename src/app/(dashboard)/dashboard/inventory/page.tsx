@@ -29,6 +29,7 @@ export default async function InventoryPage({
     ctx.db.productVariant.findMany({
       where: {
         isActive: true,
+        product: { isActive: true, organizationId: ctx.organizationId },
         ...(warehouseId ? { inventoryItems: { some: { warehouseId } } } : {}),
       },
       include: { product: true, inventoryItems: { include: { warehouse: true, batch: true } } },

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { requireAuthContext, assertPermission, assertOwner, AuthError } from "@/server/auth/context";
+import { requireAuthContext, assertPermission, assertOwner, assertBranchAccess, AuthError } from "@/server/auth/context";
 import { recordAudit } from "@/server/services/audit";
 import { increaseStock } from "@/server/services/inventory";
 import {
@@ -24,6 +24,10 @@ export async function createCategory(
     const parsed = createCategorySchema.safeParse(raw);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    }
+
+    if (parsed.data.parentId && !(await ctx.db.category.findFirst({ where: { id: parsed.data.parentId } }))) {
+      return { ok: false, error: "Parent category not found." };
     }
 
     const category = await ctx.db.category.create({
@@ -87,9 +91,23 @@ export async function createProduct(
     }
     const input = parsed.data;
 
+    const [category, brand, supplier, taxRate, warehouse] = await Promise.all([
+      input.categoryId ? ctx.db.category.findFirst({ where: { id: input.categoryId } }) : null,
+      input.brandId ? ctx.db.brand.findFirst({ where: { id: input.brandId } }) : null,
+      input.primarySupplierId ? ctx.db.supplier.findFirst({ where: { id: input.primarySupplierId } }) : null,
+      input.taxRateId ? ctx.db.taxRate.findFirst({ where: { id: input.taxRateId } }) : null,
+      input.openingWarehouseId ? ctx.db.warehouse.findFirst({ where: { id: input.openingWarehouseId, isActive: true } }) : null,
+    ]);
+    if (input.categoryId && !category) return { ok: false, error: "Category not found." };
+    if (input.brandId && !brand) return { ok: false, error: "Brand not found." };
+    if (input.primarySupplierId && !supplier) return { ok: false, error: "Supplier not found." };
+    if (input.taxRateId && !taxRate) return { ok: false, error: "Tax rate not found." };
+    if (input.openingWarehouseId && !warehouse) return { ok: false, error: "Opening warehouse not found." };
+    if (warehouse) assertBranchAccess(ctx, warehouse.branchId);
+
     if (input.barcode) {
       const existingBarcode = await ctx.db.productBarcode.findFirst({
-        where: { barcode: input.barcode },
+        where: { barcode: input.barcode, variant: { product: { organizationId: ctx.organizationId } } },
       });
       if (existingBarcode) {
         return {
@@ -187,6 +205,14 @@ export async function updateProduct(raw: unknown): Promise<ActionResult<undefine
     const input = parsed.data;
     const product = await ctx.db.product.findFirst({ where: { id: input.productId } });
     if (!product) return { ok: false, error: "Product not found." };
+    const [category, brand, supplier] = await Promise.all([
+      input.categoryId ? ctx.db.category.findFirst({ where: { id: input.categoryId } }) : null,
+      input.brandId ? ctx.db.brand.findFirst({ where: { id: input.brandId } }) : null,
+      input.primarySupplierId ? ctx.db.supplier.findFirst({ where: { id: input.primarySupplierId } }) : null,
+    ]);
+    if (input.categoryId && !category) return { ok: false, error: "Category not found." };
+    if (input.brandId && !brand) return { ok: false, error: "Brand not found." };
+    if (input.primarySupplierId && !supplier) return { ok: false, error: "Supplier not found." };
 
     await ctx.db.product.update({
       where: { id: input.productId },
@@ -270,10 +296,11 @@ export async function addProductVariant(
     if (!product) {
       return { ok: false, error: "Product not found." };
     }
+    if (input.taxRateId && !(await ctx.db.taxRate.findFirst({ where: { id: input.taxRateId } }))) return { ok: false, error: "Tax rate not found." };
 
     if (input.barcode) {
       const existingBarcode = await ctx.db.productBarcode.findFirst({
-        where: { barcode: input.barcode },
+        where: { barcode: input.barcode, variant: { product: { organizationId: ctx.organizationId } } },
       });
       if (existingBarcode) {
         return {

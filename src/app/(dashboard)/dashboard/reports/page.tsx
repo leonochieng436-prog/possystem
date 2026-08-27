@@ -93,7 +93,7 @@ export default async function ReportsPage({
       select: { refundAmount: true },
     }),
     ctx.db.productVariant.findMany({
-      where: { isActive: true, product: { isActive: true } },
+      where: { isActive: true, product: { isActive: true, organizationId: ctx.organizationId } },
       include: {
         product: { include: { category: true } },
         inventoryItems: { select: { quantity: true } },

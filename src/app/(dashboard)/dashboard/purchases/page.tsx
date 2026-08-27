@@ -30,7 +30,7 @@ export default async function PurchasesPage({
     ctx.db.supplier.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     ctx.db.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     ctx.db.warehouse.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
-    ctx.db.productVariant.findMany({ where: { isActive: true, product: { isActive: true } }, include: { product: true }, orderBy: { product: { name: "asc" } } }),
+    ctx.db.productVariant.findMany({ where: { isActive: true, product: { isActive: true, organizationId: ctx.organizationId } }, include: { product: true }, orderBy: { product: { name: "asc" } } }),
     ctx.db.purchaseOrder.findMany({ where: { ...(status ? { status: status as "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED" } : {}), ...(query ? { OR: [{ poNumber: { contains: query, mode: "insensitive" } }, { supplier: { name: { contains: query, mode: "insensitive" } } }] } : {}) }, include: { supplier: true, branch: true, warehouse: true, items: { include: { variant: { include: { product: true } } } } }, orderBy: { createdAt: "desc" } }),
     ctx.db.supplierInvoice.findMany({ where: { status: { not: "PAID" } }, include: { supplier: true }, orderBy: { createdAt: "desc" } }),
     ctx.db.supplierInvoice.findMany({ select: { amount: true, amountPaid: true } }),

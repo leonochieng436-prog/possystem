@@ -13,7 +13,7 @@ export default async function UsersPage() {
     rawPrisma.userOrganization.findMany({
       where: { organizationId: ctx.organizationId },
       include: {
-        user: true,
+        user: { include: { branches: { where: { branch: { organizationId: ctx.organizationId } } } } },
         role: true,
       },
       orderBy: { createdAt: "asc" },

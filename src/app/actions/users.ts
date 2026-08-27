@@ -38,18 +38,15 @@ export async function inviteUser(
     if (!role) {
       return { ok: false, error: "That role no longer exists." };
     }
+    const branches = await ctx.db.branch.findMany({ where: { id: { in: input.branchIds } }, select: { id: true } });
+    if (branches.length !== new Set(input.branchIds).size) return { ok: false, error: "One or more selected branches are not available." };
 
     const email = input.email.toLowerCase();
     let user = await rawPrisma.user.findUnique({ where: { email } });
     const temporaryPassword = randomBytes(6).toString("base64url");
 
     if (user) {
-      const existingMembership = await rawPrisma.userOrganization.findUnique({
-        where: { userId_organizationId: { userId: user.id, organizationId: ctx.organizationId } },
-      });
-      if (existingMembership) {
-        return { ok: false, error: "This person is already a member of your business." };
-      }
+      return { ok: false, error: "This email already belongs to an account. Use a new email for this business." };
     } else {
       user = await rawPrisma.user.create({
         data: {
@@ -103,8 +100,7 @@ export async function deactivateUser(userId: string): Promise<ActionResult<undef
 
     await rawPrisma.$transaction([
       rawPrisma.userOrganization.update({ where: { id: membership.id }, data: { isActive: false } }),
-      rawPrisma.user.update({ where: { id: userId }, data: { isActive: false } }),
-      rawPrisma.session.deleteMany({ where: { userId } }),
+      rawPrisma.session.deleteMany({ where: { userId, organizationId: ctx.organizationId } }),
     ]);
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_DEACTIVATED", entityType: "User", entityId: userId });
     revalidatePath("/dashboard/settings/users");
@@ -126,13 +122,17 @@ export async function updateUser(userId: string, raw: unknown): Promise<ActionRe
     const input = parsed.data;
     const membership = await rawPrisma.userOrganization.findUnique({ where: { userId_organizationId: { userId, organizationId: ctx.organizationId } } });
     if (!membership || membership.isOwner) return { ok: false, error: "That team member cannot be edited." };
+    const role = await ctx.db.role.findFirst({ where: { id: input.roleId } });
+    if (!role) return { ok: false, error: "That role no longer exists." };
+    const branches = await ctx.db.branch.findMany({ where: { id: { in: input.branchIds } }, select: { id: true } });
+    if (branches.length !== new Set(input.branchIds).size) return { ok: false, error: "One or more selected branches are not available." };
     const email = input.email.toLowerCase();
     const existingUser = await rawPrisma.user.findUnique({ where: { email } });
     if (existingUser && existingUser.id !== userId) return { ok: false, error: "That email is already in use." };
     await rawPrisma.$transaction([
       rawPrisma.user.update({ where: { id: userId }, data: { name: input.name, email } }),
       rawPrisma.userOrganization.update({ where: { id: membership.id }, data: { roleId: input.roleId } }),
-      rawPrisma.userBranch.deleteMany({ where: { userId } }),
+      rawPrisma.userBranch.deleteMany({ where: { userId, branch: { organizationId: ctx.organizationId } } }),
       ...(input.branchIds.length > 0 ? [rawPrisma.userBranch.createMany({ data: input.branchIds.map((branchId) => ({ userId, branchId })) })] : []),
     ]);
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_UPDATED", entityType: "User", entityId: userId, metadata: { email, roleId: input.roleId } });
@@ -155,7 +155,7 @@ export async function resetUserPassword(userId: string): Promise<ActionResult<{ 
     const temporaryPassword = randomBytes(6).toString("base64url");
     await rawPrisma.$transaction([
       rawPrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(temporaryPassword) } }),
-      rawPrisma.session.deleteMany({ where: { userId } }),
+      rawPrisma.session.deleteMany({ where: { userId, organizationId: ctx.organizationId } }),
     ]);
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "USER_PASSWORD_RESET", entityType: "User", entityId: userId });
     revalidatePath("/dashboard/settings/users");

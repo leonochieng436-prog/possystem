@@ -37,7 +37,7 @@ export async function adjustStock(raw: unknown): Promise<ActionResult<undefined>
     assertBranchAccess(ctx, warehouse.branchId);
 
     const variant = await ctx.db.productVariant.findFirst({
-      where: { id: input.variantId, product: { organizationId: ctx.organizationId } },
+      where: { id: input.variantId, isActive: true, product: { organizationId: ctx.organizationId, isActive: true } },
     });
     if (!variant) {
       return { ok: false, error: "Product not found." };

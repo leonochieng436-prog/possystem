@@ -16,7 +16,7 @@ export async function createStockTransfer(raw: unknown): Promise<ActionResult<un
     const input = parsed.data; assertBranchAccess(ctx, input.fromBranchId); assertBranchAccess(ctx, input.toBranchId);
     const [source, destination] = await Promise.all([ctx.db.warehouse.findFirst({ where: { id: input.fromWarehouseId, branchId: input.fromBranchId, isActive: true } }), ctx.db.warehouse.findFirst({ where: { id: input.toWarehouseId, branchId: input.toBranchId, isActive: true } })]);
     if (!source || !destination) return { ok: false, error: "Source or destination warehouse not found." };
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true } } });
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true, organizationId: ctx.organizationId } } });
     if (variants.length !== input.items.length) return { ok: false, error: "One or more products were not found." };
     await ctx.db.$transaction(async (tx) => {
       const transfer = await tx.stockTransfer.create({ data: { organizationId: ctx.organizationId, fromBranchId: source.branchId, toBranchId: destination.branchId, fromWarehouseId: source.id, toWarehouseId: destination.id, status: "COMPLETED", createdById: ctx.userId, items: { create: input.items } } });

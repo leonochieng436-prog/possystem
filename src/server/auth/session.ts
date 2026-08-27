@@ -78,14 +78,8 @@ export async function destroyCurrentSession() {
 }
 
 /** Switch which organization a session is "acting as" (for multi-org users). */
-export async function setSessionOrganization(
-  sessionId: string,
-  organizationId: string
-) {
-  const session = await rawPrisma.session.findUnique({
-    where: { id: sessionId },
-    select: { userId: true },
-  });
+export async function setSessionOrganization(organizationId: string) {
+  const session = await getCurrentSession();
   if (!session) throw new Error("Session not found");
 
   const membership = await rawPrisma.userOrganization.findUnique({
@@ -102,7 +96,7 @@ export async function setSessionOrganization(
   }
 
   await rawPrisma.session.update({
-    where: { id: sessionId },
+    where: { id: session.id },
     data: { organizationId },
   });
 }

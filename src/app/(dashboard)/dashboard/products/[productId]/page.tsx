@@ -16,7 +16,7 @@ export default async function ProductDetailPage({
 
   const [product, taxRates, categories, brands, suppliers] = await Promise.all([
     ctx.db.product.findFirst({
-      where: { id: productId },
+      where: { id: productId, organizationId: ctx.organizationId },
       include: {
         category: true,
         brand: true,

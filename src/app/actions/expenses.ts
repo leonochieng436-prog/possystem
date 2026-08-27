@@ -11,7 +11,11 @@ export async function createExpense(raw: unknown): Promise<ActionResult<{ id: st
     const ctx = await requireAuthContext(); assertPermission(ctx, "EXPENSE_CREATE");
     const parsed = expenseSchema.safeParse(raw); if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid expense." };
     const input = parsed.data;
-    if (input.branchId) assertBranchAccess(ctx, input.branchId);
+    if (input.branchId) {
+      const branch = await ctx.db.branch.findFirst({ where: { id: input.branchId, isActive: true } });
+      if (!branch) return { ok: false, error: "Branch not found." };
+      assertBranchAccess(ctx, branch.id);
+    }
     const category = await ctx.db.expenseCategory.findFirst({ where: { id: input.categoryId } }); if (!category) return { ok: false, error: "Expense category not found." };
     const expense = await ctx.db.expense.create({ data: { organizationId: ctx.organizationId, categoryId: category.id, branchId: input.branchId || null, amount: input.amount, paymentMethod: input.paymentMethod, description: input.description, incurredAt: input.incurredAt ? new Date(input.incurredAt) : new Date(), createdById: ctx.userId } });
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "EXPENSE_CREATED", entityType: "Expense", entityId: expense.id, metadata: { amount: input.amount } });

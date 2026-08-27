@@ -40,7 +40,7 @@ export async function createSaleReturn(raw: unknown): Promise<ActionResult<undef
   try {
     const ctx = await requireAuthContext(); assertPermission(ctx, "SALES_REFUND");
     const parsed = returnSchema.safeParse(raw); if (!parsed.success) return { ok: false, error: "Add at least one returned item." };
-    const input = parsed.data; const sale = await ctx.db.sale.findFirst({ where: { id: input.saleId, status: "COMPLETED" }, include: { items: true } });
+    const input = parsed.data; const sale = await ctx.db.sale.findFirst({ where: { id: input.saleId, organizationId: ctx.organizationId, status: "COMPLETED" }, include: { items: true } });
     if (!sale) return { ok: false, error: "Completed sale not found." };
     const warehouse = await ctx.db.warehouse.findFirst({ where: { branchId: sale.branchId, isActive: true } }); if (!warehouse) return { ok: false, error: "No active warehouse for this branch." };
     await ctx.db.$transaction(async (tx) => {

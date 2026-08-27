@@ -22,7 +22,7 @@ import { rawPrisma } from "./client";
  */
 
 // Models that carry a direct `organizationId` column.
-const TENANT_MODELS = [
+export const TENANT_MODELS = [
   "branch",
   "warehouse",
   "role",
@@ -47,12 +47,18 @@ const TENANT_MODELS = [
   "inventoryMovement",
   "supplierInvoice",
   "supplierPayment",
+  "userOrganization",
+  "cashSession",
+  "saleReturn",
+  "subscription",
 ] as const;
 
 type TenantModel = (typeof TENANT_MODELS)[number];
 
-function isTenantModel(model: string | undefined): model is TenantModel {
-  return !!model && (TENANT_MODELS as readonly string[]).includes(model);
+export function isTenantModel(model: string | undefined): model is TenantModel {
+  if (!model) return false;
+  const normalizedModel = model.charAt(0).toLowerCase() + model.slice(1);
+  return (TENANT_MODELS as readonly string[]).includes(normalizedModel);
 }
 
 /**

@@ -19,6 +19,7 @@ export class AuthError extends Error {
  */
 export interface AuthContext {
   userId: string;
+  userName: string;
   organizationId: string;
   branchIds: string[] | null; // null = unrestricted (all branches)
   isOwner: boolean;
@@ -79,6 +80,7 @@ export async function requireAuthContext(): Promise<AuthContext> {
 
   return {
     userId: session.userId,
+    userName: session.user.name,
     organizationId,
     branchIds,
     isOwner: membership.isOwner,
