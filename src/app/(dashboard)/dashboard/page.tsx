@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDownLeft, ArrowUpRight, Boxes, CircleDollarSign, Clock3, PackagePlus, ShoppingCart, Users } from "lucide-react";
 import { getRegisterSummary, PAYMENT_METHODS } from "@/server/services/register-summary";
+import { LineChart } from "@/components/charts/line-chart";
+import { PieChart } from "@/components/charts/pie-chart";
 
 export default async function DashboardPage() {
   const ctx = await requireAuthContext();
@@ -18,7 +20,7 @@ export default async function DashboardPage() {
     ctx.db.organization.findUniqueOrThrow({ where: { id: ctx.organizationId } }),
     ctx.db.branch.count(),
     ctx.db.userOrganization.count({ where: { isActive: true } }),
-    ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfDay } }, select: { total: true, cogsTotal: true, discountTotal: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
+    ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfDay } }, select: { total: true, cogsTotal: true, discountTotal: true, createdAt: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
     ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfMonth } }, select: { total: true, cogsTotal: true } }),
     ctx.db.product.findMany({ where: { isActive: true }, select: { id: true, name: true, imageUrl: true, variants: { select: { reorderLevel: true, inventoryItems: { select: { quantity: true } } } } }, orderBy: { updatedAt: "desc" }, take: 5 }),
     ctx.db.customer.count({ where: { isWalkIn: false } }),
@@ -43,6 +45,15 @@ export default async function DashboardPage() {
   const topProducts = new Map<string, Decimal>();
   for (const sale of todaySales) for (const item of sale.items) { const name = item.productNameSnapshot ?? "Unnamed product"; topProducts.set(name, (topProducts.get(name) ?? new Decimal(0)).plus(String(item.quantity))); }
   const topProductsList = [...topProducts.entries()].sort((a, b) => b[1].minus(a[1]).toNumber()).slice(0, 5);
+  const hourlySales = Array.from({ length: 8 }, (_, index) => {
+    const hour = new Date(startOfDay);
+    hour.setHours(8 + index * 2);
+    const nextHour = new Date(hour);
+    nextHour.setHours(hour.getHours() + 2);
+    return { label: hour.toLocaleTimeString("en-KE", { hour: "numeric" }), value: todaySales.filter((sale) => sale.createdAt >= hour && sale.createdAt < nextHour).reduce((total, sale) => total.plus(String(sale.total)), new Decimal(0)).toNumber() };
+  });
+  const chartColors = ["#0f7b6c", "#2563a6", "#8a5a00", "#b3261e", "#146c43"];
+  const paymentSlices = [...paymentTotals.entries()].map(([label, value], index) => ({ label: label === "MPESA" ? "M-Pesa" : label.replace("_", " "), value: value.toNumber(), color: chartColors[index % chartColors.length] }));
   const lowStock = products.filter((product) => product.variants.some((variant) => {
     const quantity = variant.inventoryItems.reduce((total, item) => total.plus(String(item.quantity)), new Decimal(0));
     return quantity.lessThanOrEqualTo(String(variant.reorderLevel));
@@ -88,6 +99,11 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
         <Card><CardContent className="p-5"><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Payment mix</p><h2 className="mt-1 text-lg font-semibold">Today&apos;s payments</h2></div><CircleDollarSign size={19} className="text-primary" /></div><div className="mt-4 space-y-3">{PAYMENT_METHODS.filter((method) => paymentTotals.has(method)).map((method) => { const amount = paymentTotals.get(method) ?? new Decimal(0); const share = paymentTotal.isZero() ? 0 : amount.div(paymentTotal).times(100).toFixed(0); return <div key={method}><div className="flex justify-between text-[12px]"><span className="font-medium">{method === "MPESA" ? "M-Pesa" : method.replace("_", " ")}</span><span className="font-tabular text-muted-foreground">{formatMoney(amount)} · {share}%</span></div><div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} /></div></div>; })}{paymentTotals.size === 0 && <p className="text-sm text-muted-foreground">No confirmed payments today.</p>}</div></CardContent></Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card><CardContent className="p-5"><div className="mb-4"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Sales activity</p><h2 className="mt-1 text-lg font-semibold">Today&apos;s revenue trend</h2></div><LineChart values={hourlySales.map((hour) => hour.value)} labels={hourlySales.map((hour) => hour.label)} valueLabel="Revenue by time" /></CardContent></Card>
+        <Card><CardContent className="p-5"><div className="mb-4"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Sales comparison</p><h2 className="mt-1 text-lg font-semibold">Payment mix</h2></div><PieChart slices={paymentSlices} formatValue={(value) => formatMoney(new Decimal(value))} /></CardContent></Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

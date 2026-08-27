@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpRight, BarChart3, CalendarDays, Download, Filter, Printer } from "lucide-react";
 import { getPreviousRange, resolveReportRange } from "@/lib/reports/range";
 import { ExportLink } from "./export-link";
+import { LineChart } from "@/components/charts/line-chart";
+import { PieChart } from "@/components/charts/pie-chart";
 
 const currency = new Intl.NumberFormat("en-KE", {
   style: "currency",
@@ -208,17 +210,17 @@ export default async function ReportsPage({
     status: sale.status,
   }));
 
-  const chartValues = sales.length
-    ? Array.from({ length: 7 }, (_, index) => {
-        const day = new Date(rangeStart);
-        day.setDate(rangeStart.getDate() + index);
-        const value = sales
-          .filter((sale) => sale.createdAt.toDateString() === day.toDateString())
-          .reduce((sum, sale) => sum.plus(toDecimal(sale.total)), new Decimal(0));
-        return value.isZero() ? 0 : value.toNumber();
-      })
-    : [0, 0, 0, 0, 0, 0, 0];
-  const chartMax = Math.max(...chartValues, 1);
+  const chartDays = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(rangeEnd);
+    day.setDate(rangeEnd.getDate() - (6 - index));
+    const value = sales.filter((sale) => sale.createdAt.toDateString() === day.toDateString()).reduce((sum, sale) => sum.plus(toDecimal(sale.total)), new Decimal(0));
+    return { label: day.toLocaleDateString("en-KE", { weekday: "short" }), value: value.toNumber() };
+  });
+  const chartValues = chartDays.map((day) => day.value);
+  const chartLabels = chartDays.map((day) => day.label);
+  const chartColors = ["#0f7b6c", "#2563a6", "#8a5a00", "#b3261e", "#146c43"];
+  const productSlices = [...topProducts.values()].sort((a, b) => b.revenue.minus(a.revenue).toNumber()).slice(0, 5).map((item, index) => ({ label: item.name, value: item.revenue.toNumber(), color: chartColors[index] }));
+  const categorySlices = [...categoryTotals.entries()].sort((a, b) => b[1].minus(a[1]).toNumber()).slice(0, 5).map(([name, value], index) => ({ label: name, value: value.toNumber(), color: chartColors[index] }));
 
   const summaryCards = [
     { label: "Total sales", value: money(currentSalesTotal), change: `${percentDelta(currentSalesTotal, priorSalesTotal)} vs previous month` },
@@ -390,25 +392,7 @@ export default async function ReportsPage({
             </div>
           </CardHeader>
           <CardContent className="pt-3">
-            <div className="rounded-xl border border-border bg-surface-muted p-4">
-              <div className="mb-4 flex items-center justify-between text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{money(currentSalesTotal)}</span>
-                <span>Daily</span>
-              </div>
-              <div className="grid h-48 grid-cols-7 items-end gap-3">
-                {chartValues.map((value, index) => (
-                  <div key={index} className="flex h-full flex-col justify-end">
-                    <div
-                      className="mb-2 rounded-t-md bg-gradient-to-t from-primary to-primary/60"
-                      style={{ height: `${Math.max((value / chartMax) * 100, 8)}%` }}
-                    />
-                    <span className="text-center text-[11px] text-muted-foreground">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              <div className="rounded-xl border border-border bg-surface-muted p-4"><LineChart values={chartValues} labels={chartLabels} valueLabel="Revenue by day" /></div>
           </CardContent>
         </Card>
 
@@ -438,6 +422,11 @@ export default async function ReportsPage({
             </div>
           </CardContent>
         </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card><CardHeader><CardTitle>Product comparison</CardTitle><CardDescription>Revenue contribution by top product</CardDescription></CardHeader><CardContent className="pt-0"><PieChart slices={productSlices} formatValue={(value) => money(value)} /></CardContent></Card>
+        <Card><CardHeader><CardTitle>Category comparison</CardTitle><CardDescription>Sales mix across product categories</CardDescription></CardHeader><CardContent className="pt-0"><PieChart slices={categorySlices} formatValue={(value) => money(value)} /></CardContent></Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
