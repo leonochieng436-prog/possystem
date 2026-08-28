@@ -3,17 +3,23 @@ import { AuthError, requireAuthContext } from "@/server/auth/context";
 import { rawPrisma } from "@/server/db/client";
 import { logout } from "@/app/actions/auth";
 import { DashboardNav, type DashboardNavItem } from "./dashboard/dashboard-nav";
+import { MobileDashboardNav } from "./dashboard/mobile-dashboard-nav";
 import {
   LogOut,
   Store,
-  Menu,
 } from "lucide-react";
 
 const NAV: DashboardNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/dashboard/pos", label: "POS", icon: "pos" },
   { href: "/dashboard/products", label: "Products", icon: "products" },
-  { href: "/dashboard/inventory", label: "Inventory", icon: "inventory" },
+  { href: "/dashboard/inventory", label: "Inventory", icon: "inventory", children: [
+    { href: "/dashboard/inventory", label: "Overview" },
+    { href: "/dashboard/inventory#stock-levels", label: "Stock levels" },
+    { href: "/dashboard/inventory#movements", label: "Stock movements" },
+    { href: "/dashboard/inventory#alerts", label: "Restock attention" },
+    { href: "/dashboard/inventory#edit-inventory", label: "Adjust stock" },
+  ] },
   { href: "/dashboard/purchases", label: "Purchases", icon: "purchases" },
   { href: "/dashboard/customers", label: "Customers", icon: "customers" },
   { href: "/dashboard/expenses", label: "Expenses", icon: "expenses" },
@@ -114,7 +120,7 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-3">
             <span className="hidden text-right sm:block"><span className="block text-sm font-semibold">{user.name}</span><span className="block text-[11px] text-muted-foreground">Owner</span></span>
             <span className="grid h-9 w-9 place-items-center rounded-full bg-primary-tint text-sm font-bold text-primary">{user.name.slice(0, 1).toUpperCase()}</span>
-            <Menu size={18} className="text-muted-foreground lg:hidden" />
+            <MobileDashboardNav items={NAV.slice(0, 9)} />
           </div>
         </header>
         <main className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">{children}</main>

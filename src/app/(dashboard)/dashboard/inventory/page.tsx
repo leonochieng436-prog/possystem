@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { Archive, ArrowDownLeft, ArrowUpRight, ClipboardList, Plus, RefreshCw } from "lucide-react";
+import { Activity, Archive, ArrowDownLeft, ArrowUpRight, ClipboardList, Plus } from "lucide-react";
 import { assertPermission, requireAuthContext } from "@/server/auth/context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,9 @@ import { ExportLink } from "../reports/export-link";
 const money = new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 });
 
 function stockStatus(quantity: Decimal, reorderLevel: Decimal) {
+  if (quantity.isNegative()) return { label: "Negative stock", variant: "danger" as const };
   if (quantity.isZero()) return { label: "Out of stock", variant: "danger" as const };
-  if (quantity.lessThanOrEqualTo(reorderLevel)) return { label: "Low stock", variant: "warning" as const };
+  if (quantity.lessThanOrEqualTo(5) || quantity.lessThanOrEqualTo(reorderLevel)) return { label: "Needs restocking", variant: "warning" as const };
   return { label: "Healthy", variant: "success" as const };
 }
 
@@ -25,20 +26,29 @@ export default async function InventoryPage({
   const query = typeof params.q === "string" ? params.q.trim() : "";
   const warehouseId = typeof params.warehouseId === "string" ? params.warehouseId : "";
   const statusFilter = typeof params.status === "string" ? params.status : "";
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
 
-  const [variants, warehouses, transfers, movements, adjustments] = await Promise.all([
+  const [variants, warehouses, transfers, movements, adjustments, movementsToday] = await Promise.all([
     ctx.db.productVariant.findMany({
       where: {
         isActive: true,
         product: { isActive: true, organizationId: ctx.organizationId },
+        ...(query ? { OR: [
+          { sku: { contains: query, mode: "insensitive" } },
+          { name: { contains: query, mode: "insensitive" } },
+          { product: { name: { contains: query, mode: "insensitive" } } },
+          { barcodes: { some: { barcode: { contains: query, mode: "insensitive" } } } },
+        ] } : {}),
         ...(warehouseId ? { inventoryItems: { some: { warehouseId } } } : {}),
       },
-      include: { product: true, inventoryItems: { include: { warehouse: true, batch: true } } },
+      include: { product: { include: { category: true } }, barcodes: true, inventoryItems: { include: { warehouse: true, batch: true } } },
     }),
     ctx.db.warehouse.findMany({ where: { isActive: true }, include: { branch: true }, orderBy: { name: "asc" } }),
   ctx.db.stockTransfer.findMany({ where: { status: { in: ["DRAFT", "IN_TRANSIT"] } }, select: { id: true } }),
-  ctx.db.inventoryMovement.findMany({ take: 8, orderBy: { createdAt: "desc" }, include: { variant: { include: { product: true } }, warehouse: true } }),
-    ctx.db.inventoryMovement.count({ where: { type: { in: ["ADJUSTMENT", "DAMAGE", "LOSS", "STOCK_COUNT"] } } }),
+    ctx.db.inventoryMovement.findMany({ where: warehouseId ? { warehouseId } : undefined, take: 8, orderBy: { createdAt: "desc" }, include: { variant: { include: { product: true } }, warehouse: true } }),
+    ctx.db.inventoryMovement.count({ where: { ...(warehouseId ? { warehouseId } : {}), type: { in: ["ADJUSTMENT", "DAMAGE", "LOSS", "STOCK_COUNT"] } } }),
+    ctx.db.inventoryMovement.count({ where: { ...(warehouseId ? { warehouseId } : {}), createdAt: { gte: startOfToday } } }),
   ]);
 
   const rows = variants.map((variant) => {
@@ -48,6 +58,8 @@ export default async function InventoryPage({
     return {
       variantId: variant.id,
       imageUrl: variant.product.imageUrl,
+      category: variant.product.category?.name ?? "Uncategorized",
+      barcode: variant.barcodes[0]?.barcode ?? "—",
   label: `${variant.product.name}${variant.name !== variant.product.name ? ` - ${variant.name}` : ""}`,
   sku: variant.sku,
   reorderLevel: new Decimal(variant.reorderLevel.toString()),
@@ -57,18 +69,20 @@ export default async function InventoryPage({
     };
   }).filter((row) => {
     const status = stockStatus(row.total, row.reorderLevel).label;
-    return !statusFilter || (statusFilter === "LOW" && status === "Low stock") || (statusFilter === "OUT" && status === "Out of stock") || (statusFilter === "IN" && status === "Healthy");
+    return !statusFilter || (statusFilter === "LOW" && status === "Needs restocking") || (statusFilter === "OUT" && status === "Out of stock") || (statusFilter === "NEGATIVE" && status === "Negative stock") || (statusFilter === "IN" && status === "Healthy");
   });
 
   const totalUnits = rows.reduce((sum, row) => sum.plus(row.total), new Decimal(0));
   const totalValue = rows.reduce((sum, row) => sum.plus(row.value), new Decimal(0));
-  const lowStock = rows.filter((row) => row.total.lessThanOrEqualTo(row.reorderLevel) && !row.total.isZero()).length;
+  const lowStock = rows.filter((row) => stockStatus(row.total, row.reorderLevel).label === "Needs restocking").length;
   const outOfStock = rows.filter((row) => row.total.isZero()).length;
+  const restockRows = rows.filter((row) => stockStatus(row.total, row.reorderLevel).label === "Needs restocking").slice(0, 6);
+  const outOfStockRows = rows.filter((row) => stockStatus(row.total, row.reorderLevel).label === "Out of stock").slice(0, 6);
   const kpis = [
     { label: "Active products", value: rows.length.toLocaleString(), detail: "Tracked inventory variants", icon: Archive },
     { label: "Stock units", value: totalUnits.toFixed(0), detail: "Across selected warehouses", icon: ClipboardList },
     { label: "Stock value", value: money.format(totalValue.toNumber()), detail: "Based on FIFO cost layers", icon: ArrowUpRight },
-    { label: "Low stock", value: String(lowStock), detail: `${outOfStock} out of stock`, icon: RefreshCw },
+    { label: "Movement today", value: movementsToday.toLocaleString(), detail: `${lowStock} low stock · ${outOfStock} out`, icon: Activity },
   ];
 
   return (
@@ -83,8 +97,8 @@ export default async function InventoryPage({
         <Card id="stock-levels"><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>Stock levels</CardTitle><p className="mt-1 text-[12px] text-muted-foreground">{rows.length} products in this view</p></div><form method="get" className="flex flex-wrap gap-2"><input name="q" defaultValue={query} placeholder="Search products" className="h-9 w-44 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3 text-sm" /><select name="warehouseId" defaultValue={warehouseId} className="h-9 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-sm"><option value="">All warehouses</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><select name="status" defaultValue={statusFilter} className="h-9 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-2 text-sm"><option value="">All stock</option><option value="IN">Healthy</option><option value="LOW">Low stock</option><option value="OUT">Out of stock</option></select><button className="h-9 rounded-[var(--radius-sm)] border border-border px-3 text-sm hover:bg-surface-muted">Filter</button></form></div></CardHeader><CardContent className="p-0 overflow-x-auto">{rows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-muted-foreground">No stock matches these filters.</p> : <table className="w-full min-w-[760px] text-sm"><thead><tr className="border-y border-border bg-surface-muted text-left text-[10px] uppercase tracking-wide text-muted-foreground"><th className="px-5 py-2">Product</th><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Warehouse</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Reorder</th><th className="px-3 py-2 text-right">Value</th><th className="px-5 py-2 text-right">Status</th></tr></thead><tbody className="divide-y divide-border">{rows.map((row) => { const status = stockStatus(row.total, row.reorderLevel); return <tr key={row.variantId}><td className="px-5 py-3"><div className="flex items-center gap-3">{row.imageUrl && <img src={row.imageUrl} alt="" className="h-9 w-9 rounded border object-cover" />}<div><p className="font-medium">{row.label}</p><p className="text-[11px] text-muted-foreground">{row.locations.join(", ") || "No stock recorded"}</p></div></div></td><td className="px-3 py-3 font-tabular text-muted-foreground">{row.sku}</td><td className="px-3 py-3 text-[12px] text-muted-foreground">{warehouseId ? warehouses.find((warehouse) => warehouse.id === warehouseId)?.name : `${row.locations.length} location${row.locations.length === 1 ? "" : "s"}`}</td><td className="px-3 py-3 text-right font-tabular font-semibold">{row.total.toFixed(3)}</td><td className="px-3 py-3 text-right font-tabular text-muted-foreground">{row.reorderLevel.toFixed(0)}</td><td className="px-3 py-3 text-right font-tabular">{money.format(row.value.toNumber())}</td><td className="px-5 py-3 text-right"><Badge variant={status.variant}>{status.label}</Badge></td></tr>; })}</tbody></table>}</CardContent></Card>
         <Card id="movements"><CardHeader><CardTitle>Recent activity</CardTitle><p className="text-[12px] text-muted-foreground">Latest append-only ledger movements</p></CardHeader><CardContent className="space-y-4">{movements.length === 0 ? <p className="text-sm text-muted-foreground">No stock movements yet.</p> : movements.map((movement) => { const positive = Number(movement.quantity) >= 0; return <div key={movement.id} className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${positive ? "bg-success-tint text-success" : "bg-warning-tint text-warning"}`}>{positive ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}</span><div className="min-w-0"><p className="text-sm font-medium">{movement.variant.product.name}</p><p className="text-[12px] text-muted-foreground">{movement.type.replaceAll("_", " ")} · {movement.warehouse.name}</p><p className={`text-[12px] font-tabular ${positive ? "text-success" : "text-warning"}`}>{positive ? "+" : ""}{movement.quantity.toString()} units · {movement.createdAt.toLocaleDateString("en-KE")}</p></div></div>; })}</CardContent></Card>
       </div>
-      <Card id="alerts"><CardHeader><CardTitle>Inventory attention</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-3"><div className="rounded-[var(--radius-sm)] bg-warning-tint px-4 py-3"><p className="text-lg font-semibold font-tabular">{lowStock}</p><p className="text-[12px] text-muted-foreground">Products at or below reorder</p></div><div className="rounded-[var(--radius-sm)] bg-danger-tint px-4 py-3"><p className="text-lg font-semibold font-tabular">{outOfStock}</p><p className="text-[12px] text-muted-foreground">Products out of stock</p></div><div className="rounded-[var(--radius-sm)] bg-primary-tint px-4 py-3"><p className="text-lg font-semibold font-tabular">{transfers.length}</p><p className="text-[12px] text-muted-foreground">Transfers awaiting completion</p></div></CardContent></Card>
-      <div id="edit-inventory"><AdjustStockForm initialVariantId={typeof params.editVariant === "string" ? params.editVariant : undefined} variants={variants.map((variant) => ({ id: variant.id, label: `${variant.product.name}${variant.name !== variant.product.name ? ` - ${variant.name}` : ""} (${variant.sku})` }))} warehouses={warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name }))} /></div>
+          <Card id="alerts"><CardHeader><CardTitle>Inventory attention</CardTitle><p className="text-[12px] text-muted-foreground">Products requiring action in this view</p></CardHeader><CardContent className="grid gap-5 lg:grid-cols-2"><div><div className="mb-3 flex items-center justify-between"><p className="text-sm font-semibold text-warning">Needs restocking</p><Badge variant="warning">{lowStock}</Badge></div>{restockRows.length === 0 ? <p className="text-sm text-muted-foreground">No products need restocking.</p> : <div className="divide-y divide-border">{restockRows.map((row) => <div key={row.variantId} className="flex items-center justify-between gap-3 py-2 text-sm"><span className="truncate">{row.label}</span><span className="shrink-0 font-tabular text-warning">{row.total.toFixed(0)} left</span></div>)}</div>}{lowStock > restockRows.length && <p className="mt-2 text-[12px] text-muted-foreground">+ {lowStock - restockRows.length} more below 5 units</p>}</div><div><div className="mb-3 flex items-center justify-between"><p className="text-sm font-semibold text-danger">Out of stock</p><Badge variant="danger">{outOfStock}</Badge></div>{outOfStockRows.length === 0 ? <p className="text-sm text-muted-foreground">No products are out of stock.</p> : <div className="divide-y divide-border">{outOfStockRows.map((row) => <div key={row.variantId} className="py-2 text-sm"><span className="truncate">{row.label}</span></div>)}</div>}{outOfStock > outOfStockRows.length && <p className="mt-2 text-[12px] text-muted-foreground">+ {outOfStock - outOfStockRows.length} more out of stock</p>}</div></CardContent></Card>
+      <div id="edit-inventory-section"><AdjustStockForm initialVariantId={typeof params.editVariant === "string" ? params.editVariant : undefined} variants={variants.map((variant) => ({ id: variant.id, label: `${variant.product.name}${variant.name !== variant.product.name ? ` - ${variant.name}` : ""} (${variant.sku})` }))} warehouses={warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name }))} /></div>
     </div>
   );
 }

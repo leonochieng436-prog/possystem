@@ -8,78 +8,118 @@ import { getRegisterSummary, PAYMENT_METHODS } from "@/server/services/register-
 import { LineChart } from "@/components/charts/line-chart";
 import { PieChart } from "@/components/charts/pie-chart";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requireAuthContext();
+  const params = searchParams ? await searchParams : {};
+  const requestedBranchId = typeof params.branchId === "string" ? params.branchId : "";
+  const period = params.period === "7d" || params.period === "30d" ? params.period : "today";
   const today = new Date();
   const startOfDay = new Date(today);
   startOfDay.setHours(0, 0, 0, 0);
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const periodStart = period === "7d"
+    ? new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000)
+    : period === "30d"
+      ? new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
+      : startOfDay;
+  periodStart.setHours(0, 0, 0, 0);
+  const previousPeriodStart = new Date(periodStart.getTime() - (today.getTime() - periodStart.getTime()));
+  const branchId = requestedBranchId && (ctx.branchIds === null || ctx.branchIds.includes(requestedBranchId)) ? requestedBranchId : "";
+  const branchWhere = branchId ? { branchId } : ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {};
+  const warehouseWhere = branchId ? { warehouse: { branchId } } : ctx.branchIds ? { warehouse: { branchId: { in: ctx.branchIds } } } : {};
   const formattedDate = today.toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const greeting = today.getHours() < 12 ? "Good morning" : today.getHours() < 18 ? "Good afternoon" : "Good evening";
 
-  const [organization, branchCount, memberCount, todaySales, monthSales, products, customers, recentSales, todayReturns] = await Promise.all([
+  const [organization, branches, periodSales, previousSales, products, recentSales, periodReturns] = await Promise.all([
     ctx.db.organization.findUniqueOrThrow({ where: { id: ctx.organizationId } }),
-    ctx.db.branch.count(),
-    ctx.db.userOrganization.count({ where: { isActive: true } }),
-    ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfDay } }, select: { total: true, cogsTotal: true, discountTotal: true, createdAt: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
-    ctx.db.sale.findMany({ where: { status: "COMPLETED", createdAt: { gte: startOfMonth } }, select: { total: true, cogsTotal: true } }),
-    ctx.db.product.findMany({ where: { isActive: true }, select: { id: true, name: true, imageUrl: true, variants: { select: { reorderLevel: true, inventoryItems: { select: { quantity: true } } } } }, orderBy: { updatedAt: "desc" }, take: 5 }),
-    ctx.db.customer.count({ where: { isWalkIn: false } }),
-    ctx.db.sale.findMany({ where: { status: "COMPLETED" }, include: { customer: true, payments: { where: { status: "CONFIRMED" }, select: { method: true } } }, orderBy: { createdAt: "desc" }, take: 6 }),
-    ctx.db.saleReturn.findMany({ where: { createdAt: { gte: startOfDay } }, select: { refundAmount: true } }),
+    ctx.db.branch.findMany({ where: ctx.branchIds ? { id: { in: ctx.branchIds } } : { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    ctx.db.sale.findMany({ where: { ...branchWhere, status: "COMPLETED", createdAt: { gte: periodStart } }, select: { total: true, cogsTotal: true, discountTotal: true, createdAt: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
+    ctx.db.sale.findMany({ where: { ...branchWhere, status: "COMPLETED", createdAt: { gte: previousPeriodStart, lt: periodStart } }, select: { total: true, cogsTotal: true, discountTotal: true } }),
+    ctx.db.product.findMany({ where: { isActive: true, variants: { some: { inventoryItems: { some: warehouseWhere } } } }, select: { id: true, name: true, imageUrl: true, variants: { select: { reorderLevel: true, inventoryItems: { where: warehouseWhere, select: { quantity: true, batch: { select: { unitCost: true } } } } } } }, orderBy: { updatedAt: "desc" } }),
+    ctx.db.sale.findMany({ where: { ...branchWhere, status: "COMPLETED" }, include: { customer: true, payments: { where: { status: "CONFIRMED" }, select: { method: true } } }, orderBy: { createdAt: "desc" }, take: 6 }),
+    ctx.db.saleReturn.findMany({ where: { createdAt: { gte: periodStart }, sale: branchId ? { branchId } : ctx.branchIds ? { branchId: { in: ctx.branchIds } } : undefined }, select: { refundAmount: true } }),
   ]);
   const currentSession = await ctx.db.cashSession.findFirst({ where: { userId: ctx.userId, status: "OPEN" } });
   const currentSummary = currentSession ? await getRegisterSummary(ctx.db, currentSession.id) : null;
 
   const sum = (values: { total: unknown }[]) => values.reduce((total, item) => total.plus(String(item.total)), new Decimal(0));
-  const todayRevenue = sum(todaySales);
-  const monthRevenue = sum(monthSales);
-  const monthCogs = monthSales.reduce((total, item) => total.plus(String(item.cogsTotal)), new Decimal(0));
-  const todayItems = todaySales.reduce((total, sale) => total.plus(sale.items.reduce((sum, item) => sum.plus(String(item.quantity)), new Decimal(0))), new Decimal(0));
-  const todayDiscounts = todaySales.reduce((total, sale) => total.plus(String(sale.discountTotal)), new Decimal(0));
-  const todayRefunds = todayReturns.reduce((total, item) => total.plus(String(item.refundAmount)), new Decimal(0));
-  const averageSale = todaySales.length ? todayRevenue.div(todaySales.length) : new Decimal(0);
-  const servedCustomers = new Set(todaySales.map((sale) => sale.customerId).filter(Boolean)).size;
+  const periodRevenue = sum(periodSales);
+  const periodCogs = periodSales.reduce((total, item) => total.plus(String(item.cogsTotal)), new Decimal(0));
+  const periodDiscounts = periodSales.reduce((total, sale) => total.plus(String(sale.discountTotal)), new Decimal(0));
+  const periodRefunds = periodReturns.reduce((total, item) => total.plus(String(item.refundAmount)), new Decimal(0));
+  const netRevenue = periodRevenue.minus(periodDiscounts).minus(periodRefunds);
+  const periodItems = periodSales.reduce((total, sale) => total.plus(sale.items.reduce((sum, item) => sum.plus(String(item.quantity)), new Decimal(0))), new Decimal(0));
+  const averageSale = periodSales.length ? periodRevenue.div(periodSales.length) : new Decimal(0);
+  const servedCustomers = new Set(periodSales.map((sale) => sale.customerId).filter(Boolean)).size;
   const paymentTotals = new Map<string, Decimal>();
-  for (const sale of todaySales) for (const payment of sale.payments) paymentTotals.set(payment.method, (paymentTotals.get(payment.method) ?? new Decimal(0)).plus(String(payment.amount)));
+  for (const sale of periodSales) for (const payment of sale.payments) paymentTotals.set(payment.method, (paymentTotals.get(payment.method) ?? new Decimal(0)).plus(String(payment.amount)));
   const paymentTotal = [...paymentTotals.values()].reduce((total, value) => total.plus(value), new Decimal(0));
   const topProducts = new Map<string, Decimal>();
-  for (const sale of todaySales) for (const item of sale.items) { const name = item.productNameSnapshot ?? "Unnamed product"; topProducts.set(name, (topProducts.get(name) ?? new Decimal(0)).plus(String(item.quantity))); }
+  for (const sale of periodSales) for (const item of sale.items) { const name = item.productNameSnapshot ?? "Unnamed product"; topProducts.set(name, (topProducts.get(name) ?? new Decimal(0)).plus(String(item.quantity))); }
   const topProductsList = [...topProducts.entries()].sort((a, b) => b[1].minus(a[1]).toNumber()).slice(0, 5);
   const hourlySales = Array.from({ length: 8 }, (_, index) => {
     const hour = new Date(startOfDay);
     hour.setHours(8 + index * 2);
     const nextHour = new Date(hour);
     nextHour.setHours(hour.getHours() + 2);
-    return { label: hour.toLocaleTimeString("en-KE", { hour: "numeric" }), value: todaySales.filter((sale) => sale.createdAt >= hour && sale.createdAt < nextHour).reduce((total, sale) => total.plus(String(sale.total)), new Decimal(0)).toNumber() };
+    return { label: hour.toLocaleTimeString("en-KE", { hour: "numeric" }), value: periodSales.filter((sale) => sale.createdAt >= hour && sale.createdAt < nextHour).reduce((total, sale) => total.plus(String(sale.total)), new Decimal(0)).toNumber() };
   });
   const chartColors = ["#0f7b6c", "#2563a6", "#8a5a00", "#b3261e", "#146c43"];
   const paymentSlices = [...paymentTotals.entries()].map(([label, value], index) => ({ label: label === "MPESA" ? "M-Pesa" : label.replace("_", " "), value: value.toNumber(), color: chartColors[index % chartColors.length] }));
+  const stockValue = products.reduce((sum, product) => sum.plus(product.variants.reduce((variantSum, variant) => {
+    return variantSum.plus(variant.inventoryItems.reduce((itemSum, item) => itemSum.plus(new Decimal(String(item.quantity)).times(String(item.batch?.unitCost ?? 0))), new Decimal(0)));
+  }, new Decimal(0))), new Decimal(0));
   const lowStock = products.filter((product) => product.variants.some((variant) => {
     const quantity = variant.inventoryItems.reduce((total, item) => total.plus(String(item.quantity)), new Decimal(0));
-    return quantity.lessThanOrEqualTo(String(variant.reorderLevel));
+    return quantity.gt(0) && (quantity.lessThanOrEqualTo(5) || quantity.lessThanOrEqualTo(String(variant.reorderLevel)));
   })).length;
+  const outOfStock = products.filter((product) => product.variants.length > 0 && product.variants.every((variant) => variant.inventoryItems.reduce((total, item) => total.plus(String(item.quantity)), new Decimal(0)).isZero())).length;
+  const previousRevenue = sum(previousSales);
+  const percentChange = (current: Decimal, previous: Decimal) => previous.isZero() ? "New" : `${current.minus(previous).div(previous).times(100).toFixed(1)}%`;
+  const branchCount = branches.length;
+  const totalStockUnits = products.reduce((sum, product) => sum.plus(product.variants.reduce((variantSum, variant) => variantSum.plus(variant.inventoryItems.reduce((itemSum, item) => itemSum.plus(String(item.quantity)), new Decimal(0))), new Decimal(0))), new Decimal(0));
+  const monthRevenue = periodRevenue;
+  const todayItems = periodItems;
+  const todayRefunds = periodRefunds;
   const formatMoney = (value: Decimal) => `KES ${value.toFixed(2)}`;
 
   return (
     <div className="dashboard-home space-y-6">
       <section className="dashboard-hero flex flex-col justify-between gap-6 rounded-[var(--radius-lg)] px-6 py-7 text-white shadow-[0_14px_30px_rgba(15,123,108,0.14)] sm:flex-row sm:items-end sm:px-8">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/65">{organization.name} · All Branches</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Good morning, {ctx.userName}</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/65">{organization.name} · {branchId ? branches.find((branch) => branch.id === branchId)?.name : "All Branches"}</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">{greeting}, {ctx.userName}</h1>
           <p className="mt-2 text-sm text-white/75">{formattedDate}</p>
           <p className="mt-2 max-w-md text-sm text-white/75">Here&apos;s what&apos;s happening across your business today.</p>
         </div>
-        <Link href="/dashboard/pos" className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-white px-4 text-sm font-semibold text-primary transition-transform hover:-translate-y-0.5">
-          <ShoppingCart size={16} /> Open POS <ArrowUpRight size={15} />
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <form method="get" className="flex flex-wrap gap-2">
+            <select name="branchId" defaultValue={branchId} className="h-10 rounded-[var(--radius-sm)] border border-white/25 bg-white/10 px-3 text-sm text-white">
+              <option value="" className="text-foreground">All branches</option>
+              {branches.map((branch) => <option key={branch.id} value={branch.id} className="text-foreground">{branch.name}</option>)}
+            </select>
+            <select name="period" defaultValue={period} className="h-10 rounded-[var(--radius-sm)] border border-white/25 bg-white/10 px-3 text-sm text-white">
+              <option value="today" className="text-foreground">Today</option>
+              <option value="7d" className="text-foreground">Last 7 days</option>
+              <option value="30d" className="text-foreground">Last 30 days</option>
+            </select>
+            <button className="h-10 rounded-[var(--radius-sm)] bg-white/15 px-3 text-sm font-semibold text-white hover:bg-white/25">Apply</button>
+          </form>
+          <Link href="/dashboard/pos" className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-white px-4 text-sm font-semibold text-primary transition-transform hover:-translate-y-0.5">
+            <ShoppingCart size={16} /> Open POS <ArrowUpRight size={15} />
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Today's sales", value: formatMoney(todayRevenue), note: `${todaySales.length} completed transaction${todaySales.length === 1 ? "" : "s"}`, icon: CircleDollarSign, cardTone: "metric-card-revenue", tone: "bg-primary-tint text-primary" },
-          { label: "Gross profit · MTD", value: formatMoney(monthRevenue.minus(monthCogs)), note: `Revenue ${formatMoney(monthRevenue)}`, icon: ArrowUpRight, cardTone: "metric-card-profit", tone: "bg-success-tint text-success" },
-          { label: "Stock alerts", value: String(lowStock), note: lowStock ? "Items need attention" : "All stock levels healthy", icon: Boxes, cardTone: lowStock ? "metric-card-stock-warning" : "metric-card-stock-healthy", tone: lowStock ? "bg-warning-tint text-warning" : "bg-success-tint text-success" },
-          { label: "Customers", value: String(customers), note: `${branchCount} active branches · ${memberCount} team members`, icon: Users, cardTone: "metric-card-customers", tone: "bg-info-tint text-info" },
+          { label: "Gross sales", value: formatMoney(periodRevenue), note: `${percentChange(periodRevenue, previousRevenue)} vs previous period`, icon: CircleDollarSign, cardTone: "metric-card-revenue", tone: "bg-primary-tint text-primary" },
+          { label: "Net revenue", value: formatMoney(netRevenue), note: `${formatMoney(periodDiscounts)} discounts · ${formatMoney(periodRefunds)} refunds`, icon: ArrowUpRight, cardTone: "metric-card-profit", tone: "bg-info-tint text-info" },
+          { label: "Gross profit", value: formatMoney(periodRevenue.minus(periodCogs)), note: `${periodRevenue.isZero() ? "0.0" : periodRevenue.minus(periodCogs).div(periodRevenue).times(100).toFixed(1)}% margin`, icon: ArrowUpRight, cardTone: "metric-card-profit", tone: "bg-success-tint text-success" },
+          { label: "Transactions", value: String(periodSales.length), note: `${percentChange(new Decimal(periodSales.length), new Decimal(previousSales.length))} vs previous period`, icon: ShoppingCart, cardTone: "metric-card-customers", tone: "bg-primary-tint text-primary" },
         ].map((metric) => {
           const Icon = metric.icon;
           return <Card key={metric.label} className={`metric-card ${metric.cardTone}`}><CardContent className="flex items-start justify-between p-5"><div><p className="text-[12px] font-medium text-muted-foreground">{metric.label}</p><p className="mt-3 font-tabular text-2xl font-semibold tracking-tight">{metric.value}</p><p className="mt-1 text-[12px] text-muted-foreground">{metric.note}</p></div><span className={`grid h-9 w-9 place-items-center rounded-[var(--radius-sm)] ${metric.tone}`}><Icon size={18} /></span></CardContent></Card>;
@@ -87,7 +127,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[{ label: "Transactions", value: String(todaySales.length), note: "Completed today", icon: ShoppingCart }, { label: "Items sold", value: todayItems.toFixed(0), note: "Units across sales", icon: Boxes }, { label: "Average sale", value: formatMoney(averageSale), note: "Per transaction", icon: ArrowUpRight }, { label: "Discounts", value: formatMoney(todayDiscounts), note: "Applied today", icon: CircleDollarSign }].map((metric) => { const Icon = metric.icon; return <Card key={metric.label}><CardContent className="p-4"><div className="flex items-center justify-between"><p className="text-[12px] text-muted-foreground">{metric.label}</p><Icon size={17} className="text-primary" /></div><p className="mt-3 font-tabular text-xl font-semibold">{metric.value}</p><p className="mt-1 text-[11px] text-muted-foreground">{metric.note}</p></CardContent></Card>; })}
+        {[{ label: "Items sold", value: todayItems.toFixed(0), note: `${periodSales.length} completed transactions`, icon: Boxes }, { label: "Average sale", value: formatMoney(averageSale), note: "Per transaction", icon: ArrowUpRight }, { label: "Stock value", value: formatMoney(stockValue), note: `${totalStockUnits.toFixed(0)} units on hand`, icon: Boxes }, { label: "Out of stock", value: String(outOfStock), note: `${lowStock} need restocking`, icon: CircleDollarSign }].map((metric) => { const Icon = metric.icon; return <Card key={metric.label}><CardContent className="p-4"><div className="flex items-center justify-between"><p className="text-[12px] text-muted-foreground">{metric.label}</p><Icon size={17} className="text-primary" /></div><p className="mt-3 font-tabular text-xl font-semibold">{metric.value}</p><p className="mt-1 text-[11px] text-muted-foreground">{metric.note}</p></CardContent></Card>; })}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
