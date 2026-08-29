@@ -26,9 +26,9 @@ export function MobileDashboardNav({ items }: { items: DashboardNavItem[] }) {
             type="button"
             aria-label="Close navigation menu"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-foreground/30"
+            className="mobile-nav-backdrop absolute inset-0 bg-foreground/30"
           />
-          <aside className="relative h-full w-[min(86vw,320px)] overflow-y-auto bg-surface px-4 py-5 shadow-2xl">
+          <aside className="mobile-nav-panel relative h-full w-[min(86vw,320px)] overflow-y-auto bg-surface px-4 py-5 shadow-2xl">
             <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
               <Link href="/dashboard" onClick={() => setOpen(false)} className="text-sm font-bold tracking-[0.15em]">DUKAOS</Link>
               <button

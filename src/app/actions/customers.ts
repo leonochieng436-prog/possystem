@@ -20,6 +20,48 @@ export async function createCustomer(raw: unknown): Promise<ActionResult<{ id: s
   } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; throw e; }
 }
 
+export async function clearCustomerBalance(raw: unknown): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext(); assertPermission(ctx, "CUSTOMER_CREDIT_MANAGE");
+    const data = raw instanceof FormData ? Object.fromEntries(raw.entries()) : raw;
+    const customerId = typeof data === "object" && data && "customerId" in data ? String(data.customerId ?? "") : "";
+    if (!customerId) return { ok: false, error: "Select a customer to clear." };
+
+    const customer = await ctx.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer) return { ok: false, error: "Customer not found." };
+
+    const creditSales = await ctx.db.sale.findMany({
+      where: { customerId: customer.id, isCreditSale: true, status: "COMPLETED" },
+      select: { total: true, amountPaid: true },
+    });
+    const customerPayments = await ctx.db.customerPayment.findMany({
+      where: { customerId: customer.id },
+      select: { amount: true },
+    });
+
+    const balance = creditSales.reduce((sum, sale) => sum.plus(sale.total.toString()).minus(sale.amountPaid.toString()), new Decimal(0))
+      .minus(customerPayments.reduce((sum, payment) => sum.plus(payment.amount.toString()), new Decimal(0)));
+
+    if (balance.lte(0)) return { ok: false, error: "This customer already has no outstanding balance." };
+
+    await ctx.db.customerPayment.create({
+      data: {
+        organizationId: ctx.organizationId,
+        customerId: customer.id,
+        amount: balance.toFixed(2),
+        method: "cash",
+        reference: "Balance cleared",
+        receivedById: ctx.userId,
+      },
+    });
+
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "CUSTOMER_CREDIT_CLEARED", entityType: "Customer", entityId: customer.id, metadata: { clearedAmount: balance.toFixed(2) } });
+    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/credit");
+    return { ok: true, data: undefined };
+  } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; return { ok: false, error: e instanceof Error ? e.message : "Could not clear the customer balance." }; }
+}
+
 export async function recordCustomerPayment(raw: unknown): Promise<ActionResult<undefined>> {
   try {
     const ctx = await requireAuthContext(); assertPermission(ctx, "CUSTOMER_CREDIT_MANAGE");

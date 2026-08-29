@@ -21,6 +21,7 @@ const NAV: DashboardNavItem[] = [
     { href: "/dashboard/inventory#edit-inventory", label: "Adjust stock" },
   ] },
   { href: "/dashboard/purchases", label: "Purchases", icon: "purchases" },
+  { href: "/dashboard/credit", label: "Credit", icon: "customers" },
   { href: "/dashboard/customers", label: "Customers", icon: "customers" },
   { href: "/dashboard/expenses", label: "Expenses", icon: "expenses" },
   { href: "/dashboard/reports", label: "Reports", icon: "reports" },

@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createCustomer, recordCustomerPayment } from "@/app/actions/customers";
+import { clearCustomerBalance, createCustomer, recordCustomerPayment } from "@/app/actions/customers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -16,4 +16,24 @@ export function CustomerPaymentForm({ customers }: { customers: { id: string; na
   const router = useRouter(); const [pending, startTransition] = useTransition();
   function submit(formData: FormData) { startTransition(async () => { const result = await recordCustomerPayment(Object.fromEntries(formData.entries())); if (result.ok) { (document.getElementById("customer-payment-form") as HTMLFormElement)?.reset(); router.refresh(); } }); }
   return <form id="customer-payment-form" action={submit} className="grid gap-2 sm:grid-cols-4"><select name="customerId" required className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="">Customer...</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><Input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount" required /><select name="method" defaultValue="cash" className="h-9 rounded border border-border-strong bg-surface px-2 text-sm"><option value="cash">Cash</option><option value="mpesa">M-Pesa</option><option value="bank">Bank</option><option value="card">Card</option></select><Button type="submit" disabled={pending}>{pending ? "Saving..." : "Record payment"}</Button></form>;
+}
+
+export function ClearCustomerBalanceForm({ customerId, customerName }: { customerId: string; customerName: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    startTransition(async () => {
+      const result = await clearCustomerBalance({ customerId });
+      if (result.ok) {
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Button type="button" variant="secondary" size="sm" className="gap-2" disabled={pending} onClick={submit}>
+      {pending ? "Clearing..." : `Clear ${customerName}`}
+    </Button>
+  );
 }

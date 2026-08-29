@@ -33,7 +33,7 @@ export default async function DashboardPage({
   const formattedDate = today.toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const greeting = today.getHours() < 12 ? "Good morning" : today.getHours() < 18 ? "Good afternoon" : "Good evening";
 
-  const [organization, branches, periodSales, previousSales, products, recentSales, periodReturns] = await Promise.all([
+  const [organization, branches, periodSales, previousSales, products, recentSales, periodReturns, creditCustomers] = await Promise.all([
     ctx.db.organization.findUniqueOrThrow({ where: { id: ctx.organizationId } }),
     ctx.db.branch.findMany({ where: ctx.branchIds ? { id: { in: ctx.branchIds } } : { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     ctx.db.sale.findMany({ where: { ...branchWhere, status: "COMPLETED", createdAt: { gte: periodStart } }, select: { total: true, cogsTotal: true, discountTotal: true, createdAt: true, items: { select: { productNameSnapshot: true, quantity: true, total: true } }, payments: { where: { status: "CONFIRMED" }, select: { method: true, amount: true } }, customerId: true } }),
@@ -41,6 +41,14 @@ export default async function DashboardPage({
     ctx.db.product.findMany({ where: { isActive: true, variants: { some: { inventoryItems: { some: warehouseWhere } } } }, select: { id: true, name: true, imageUrl: true, variants: { select: { reorderLevel: true, inventoryItems: { where: warehouseWhere, select: { quantity: true, batch: { select: { unitCost: true } } } } } } }, orderBy: { updatedAt: "desc" } }),
     ctx.db.sale.findMany({ where: { ...branchWhere, status: "COMPLETED" }, include: { customer: true, payments: { where: { status: "CONFIRMED" }, select: { method: true } } }, orderBy: { createdAt: "desc" }, take: 6 }),
     ctx.db.saleReturn.findMany({ where: { createdAt: { gte: periodStart }, sale: branchId ? { branchId } : ctx.branchIds ? { branchId: { in: ctx.branchIds } } : undefined }, select: { refundAmount: true } }),
+    ctx.db.customer.findMany({
+      where: { isWalkIn: false },
+      include: {
+        sales: { where: { isCreditSale: true, status: "COMPLETED" }, select: { total: true, amountPaid: true } },
+        payments: { select: { amount: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const currentSession = await ctx.db.cashSession.findFirst({ where: { userId: ctx.userId, status: "OPEN" } });
   const currentSummary = currentSession ? await getRegisterSummary(ctx.db, currentSession.id) : null;
@@ -85,6 +93,24 @@ export default async function DashboardPage({
   const todayItems = periodItems;
   const todayRefunds = periodRefunds;
   const formatMoney = (value: Decimal) => `KES ${value.toFixed(2)}`;
+  const creditBalances = creditCustomers.map((customer) => {
+    const salesOutstanding = customer.sales.reduce(
+      (sum, sale) => sum.plus(new Decimal(String(sale.total)).minus(new Decimal(String(sale.amountPaid)))),
+      new Decimal(0),
+    );
+    const payments = customer.payments.reduce(
+      (sum, payment) => sum.plus(new Decimal(String(payment.amount))),
+      new Decimal(0),
+    );
+    return {
+      customerId: customer.id,
+      customerName: customer.name,
+      balance: salesOutstanding.minus(payments),
+    };
+  });
+  const openCreditCustomers = creditBalances.filter((entry) => entry.balance.gt(0));
+  const totalCreditOutstanding = openCreditCustomers.reduce((sum, entry) => sum.plus(entry.balance), new Decimal(0));
+  const topCreditAccounts = [...openCreditCustomers].sort((a, b) => b.balance.minus(a.balance).toNumber()).slice(0, 3);
 
   return (
     <div className="dashboard-home space-y-6">
@@ -147,8 +173,44 @@ export default async function DashboardPage({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Receivables</p>
+                <h2 className="mt-1 text-lg font-semibold">Top credit accounts</h2>
+              </div>
+              <Link href="/dashboard/credit" className="text-[12px] font-semibold text-primary hover:underline">View all</Link>
+            </div>
+            {topCreditAccounts.length === 0 ? (
+              <p className="mt-5 text-sm text-muted-foreground">No customer balances are currently outstanding.</p>
+            ) : (
+              <div className="mt-4 divide-y divide-border">
+                {topCreditAccounts.map((entry, index) => (
+                  <div key={entry.customerId} className="flex items-center justify-between gap-4 py-3 first:pt-0">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-tint text-[11px] font-semibold text-primary">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{entry.customerName}</p>
+                        <p className="text-[11px] text-muted-foreground">Open balance</p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 font-tabular text-sm font-semibold">{formatMoney(entry.balance)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card><CardContent className="p-5"><div className="mb-4"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Sales comparison</p><h2 className="mt-1 text-lg font-semibold">Payment mix</h2></div><PieChart slices={paymentSlices} formatValue={(value) => formatMoney(new Decimal(value))} /></CardContent></Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card><CardContent className="p-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Product performance</p><h2 className="mt-1 text-lg font-semibold">Top products today</h2></div><Link href="/dashboard/reports" className="text-[12px] font-semibold text-primary hover:underline">View reports</Link></div>{topProductsList.length === 0 ? <p className="mt-5 text-sm text-muted-foreground">No products sold today.</p> : <div className="mt-4 divide-y divide-border">{topProductsList.map(([name, quantity], index) => <div key={name} className="flex items-center justify-between gap-4 py-3 first:pt-0"><div className="flex min-w-0 items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-tint text-[11px] font-semibold text-primary">{String(index + 1).padStart(2, "0")}</span><span className="truncate text-sm font-medium">{name}</span></div><span className="shrink-0 font-tabular text-sm font-semibold">{quantity.toFixed(0)} sold</span></div>)}</div>}</CardContent></Card>
-        <Card><CardContent className="p-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-warning">Needs attention</p><h2 className="mt-1 text-lg font-semibold">Today&apos;s exceptions</h2></div><ArrowDownLeft size={19} className="text-warning" /></div><div className="mt-4 space-y-3"><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-warning-tint px-3 py-2.5"><span className="text-[12px] font-medium">Stock alerts</span><Link href="/dashboard/inventory" className="text-sm font-semibold text-warning hover:underline">{lowStock} items</Link></div><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-danger-tint px-3 py-2.5"><span className="text-[12px] font-medium">Refunds today</span><span className="font-tabular text-sm font-semibold text-danger">{formatMoney(todayRefunds)}</span></div><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-primary-tint px-3 py-2.5"><span className="text-[12px] font-medium">Customers served</span><span className="font-tabular text-sm font-semibold text-primary">{servedCustomers}</span></div></div></CardContent></Card>
+        <Card><CardContent className="p-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-warning">Needs attention</p><h2 className="mt-1 text-lg font-semibold">Today&apos;s exceptions</h2></div><ArrowDownLeft size={19} className="text-warning" /></div><div className="mt-4 space-y-3"><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-warning-tint px-3 py-2.5"><span className="text-[12px] font-medium">Stock alerts</span><Link href="/dashboard/inventory" className="text-sm font-semibold text-warning hover:underline">{lowStock} items</Link></div><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-danger-tint px-3 py-2.5"><span className="text-[12px] font-medium">Refunds today</span><span className="font-tabular text-sm font-semibold text-danger">{formatMoney(todayRefunds)}</span></div><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-primary-tint px-3 py-2.5"><span className="text-[12px] font-medium">Customers served</span><span className="font-tabular text-sm font-semibold text-primary">{servedCustomers}</span></div><div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-info-tint px-3 py-2.5"><span className="text-[12px] font-medium">Credit summary</span><Link href="/dashboard/credit" className="text-sm font-semibold text-info hover:underline">{formatMoney(totalCreditOutstanding)}</Link></div><div className="rounded-[var(--radius-sm)] border border-dashed border-border bg-surface-muted px-3 py-2.5 text-[12px] text-muted-foreground">{openCreditCustomers.length} customer{openCreditCustomers.length === 1 ? "" : "s"} with open balances.</div></div></CardContent></Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
