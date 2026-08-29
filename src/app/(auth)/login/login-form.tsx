@@ -6,7 +6,7 @@ import { login } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 
 export function LoginForm() {
   const router = useRouter();
@@ -34,13 +34,12 @@ export function LoginForm() {
 
   return (
     <form action={handleSubmit} className="login-form space-y-6">
-      <div className="mb-8 flex items-center gap-3 lg:hidden">
-        <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-sm)] bg-primary text-white shadow-[0_8px_18px_rgba(15,123,108,0.22)]">D</span>
-        <span className="text-lg font-bold tracking-[0.16em] text-foreground">DUKAOS</span>
+      <div className="mb-8 flex items-center justify-center lg:hidden">
+        <img src="/images/DukaOS-logo.png" alt="DukaOS logo" className="h-auto w-60 object-contain" />
       </div>
-      <div>
-        <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-primary-tint text-primary">
-          <ShieldCheck size={22} />
+      <div className="flex flex-col items-center text-center">
+        <div className="mb-5 flex h-24 w-24 items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-primary-tint p-3 text-primary shadow-[0_10px_24px_rgba(15,123,108,0.12)] sm:h-28 sm:w-28">
+          <img src="/images/DukaOS-logo.png" alt="DukaOS logo" className="h-full w-full object-contain" />
         </div>
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Secure business access</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Sign in to DUKAOS</h1>

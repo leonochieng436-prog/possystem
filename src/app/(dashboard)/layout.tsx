@@ -67,13 +67,7 @@ export default async function DashboardLayout({
       <aside className="scrollbar-hidden hidden border-r border-border bg-surface lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto">
         <div className="border-b border-border px-5 py-5">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-md)] bg-primary text-primary-foreground shadow-[0_5px_14px_rgba(15,123,108,0.2)]">
-              <Store size={20} />
-            </span>
-            <div>
-              <p className="text-[15px] font-bold tracking-[0.16em]">DUKAOS</p>
-              <p className="text-[11px] text-muted-foreground">Business Management</p>
-            </div>
+            <img src="/images/DukaOS-logo2.png" alt="DukaOS logo" className="h-12 w-auto object-contain" />
           </div>
           <div className="mt-5 rounded-[var(--radius-md)] border border-border bg-background px-3 py-2.5">
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Workspace</p>
@@ -111,8 +105,7 @@ export default async function DashboardLayout({
       <div className="flex min-h-screen min-w-0 flex-col lg:h-screen">
         <header className="flex h-[72px] items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
           <div className="flex items-center gap-3 lg:hidden">
-            <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"><Store size={17} /></span>
-            <span className="text-sm font-bold tracking-[0.15em]">DUKAOS</span>
+            <img src="/images/DukaOS-logo2.png" alt="DukaOS logo" className="h-8 w-auto object-contain" />
           </div>
           <div className="hidden lg:block">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{organization.name}</p>

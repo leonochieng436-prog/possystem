@@ -16,6 +16,24 @@ export const metadata: Metadata = {
   title: "DukaOS — Business Operating System",
   description:
     "Point of sale, inventory, suppliers, customers and financials for Kenyan businesses.",
+  icons: {
+    icon: "/images/DukaOS-logo.png",
+    shortcut: "/images/DukaOS-logo.png",
+    apple: "/images/DukaOS-logo.png",
+  },
+  openGraph: {
+    title: "DukaOS — Business Operating System",
+    description:
+      "Point of sale, inventory, suppliers, customers and financials for Kenyan businesses.",
+    images: ["/images/DukaOS-logo.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DukaOS — Business Operating System",
+    description:
+      "Point of sale, inventory, suppliers, customers and financials for Kenyan businesses.",
+    images: ["/images/DukaOS-logo.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
